@@ -21,8 +21,32 @@ QPushButton {
     padding: 10px;
     text-align: left;
     font-size: 13px;
+    cursor: pointer;
 }
 #active-btn{
     background-color: #EE10B0;
-    
+}
+QScrollBar:vertical {
+    border: none;
+    background: white;
+    width: 12px;
+    margin: 0px 3px 0 3px;
+}
+QScrollBar::handle:vertical {
+    background: #EE10B0;
+    min-height: 20px;
+}
+QScrollBar::handle:vertical:hover {
+    background: #ff82dc;
+}
+QScrollBar::add-line:vertical {
+    background: none;
+    border-radius: 6px;
+}
+QScrollBar::sub-line:vertical {
+    background :none;
+    border-radius: 6px;
+}
+#home{
+    margin: auto;
 }
