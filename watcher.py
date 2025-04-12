@@ -3,7 +3,6 @@ import subprocess
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 import time
-
 class ReloadHandler(FileSystemEventHandler):
     def __init__(self, file_to_run):
         self.file_to_run = file_to_run
