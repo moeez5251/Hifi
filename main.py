@@ -7,7 +7,7 @@ from PySide6.QtCore import Qt, QSize, QFile, QTextStream
 from PySide6.QtGui import QIcon
 from PySide6.QtGui import QFontDatabase, QFont,QColor
 from components.gradient_label import GradientLabel  # Ensure this is implemented correctly
-from PySide6.QtGui import QImage,QPixmap
+from PySide6.QtGui import QImage,QPixmap,QPainter,QPainterPath
 class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
@@ -101,29 +101,37 @@ class MainWindow(QWidget):
         home = QVBoxLayout()
         home.setSpacing(20)
         home.setAlignment(Qt.AlignTop)
-        home.setContentsMargins(0, 0, 0, 0)
-
+        home.setContentsMargins(2, 0, 2, 0)
         # Use QLabel for the background image
         background_label = QLabel()
         image = QImage('assets/Banner.png')
         if image.isNull():
-            print("Error: Failed to load 'assets/Banner.png'")
             background_label.setStyleSheet("background: red;")  # Fallback to see widget
         else:
-            # Calculate size based on window width and image aspect ratio
-            window_width = self.width() if self.width() > 0 else 800  # Fallback width
+            window_width = self.width() if self.width() > 0 else 800
             aspect_ratio = image.width() / image.height()
-            image_height = int(window_width / aspect_ratio)  # Height to show full image
-            background_label.setFixedSize(1500, image_height)
-            pixmap = QPixmap.fromImage(image).scaled(window_width, image_height, Qt.KeepAspectRatio)
-            background_label.setPixmap(pixmap)
-            background_label.setScaledContents(True)  # Scale pixmap to label size
-            background_label.setStyleSheet("border: 1px solid blue;")  # Debug border
-            print(f"Window width: {window_width}, Image size: {image.width()}x{image.height()}, Label size: {window_width}x{image_height}")
+            image_height = int(self.height() * 0.5) if self.height() > 0 else 400
 
+            scaled_pixmap = QPixmap.fromImage(image).scaled(
+                window_width, image_height, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation
+            )
+
+            rounded_pixmap = QPixmap(window_width, image_height)
+            rounded_pixmap.fill(Qt.transparent)
+
+            painter = QPainter(rounded_pixmap)
+            painter.setRenderHint(QPainter.Antialiasing)
+            path = QPainterPath()
+            radius = 15
+            path.addRoundedRect(0, 0, window_width, image_height, radius, radius)
+            painter.setClipPath(path)
+            painter.drawPixmap(0, 0, scaled_pixmap)
+            painter.end()
+
+            background_label.setPixmap(rounded_pixmap)
+            background_label.setScaledContents(True)
         # Layout for labels on top of background
         content_layout = QVBoxLayout(background_label)
-        content_layout.setAlignment(Qt.AlignCenter)
         content_layout.setContentsMargins(10, 10, 10, 10)
 
         # Add labels in front of the background
