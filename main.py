@@ -3,11 +3,16 @@ from PySide6.QtWidgets import (
     QHBoxLayout, QStackedWidget, QScrollArea,QSizePolicy,
 )
 import sys
-from PySide6.QtCore import Qt, QSize, QFile, QTextStream
+from PySide6.QtCore import Qt, QSize, QFile, QTextStream,QUrl
 from PySide6.QtGui import QIcon
 from PySide6.QtGui import QFontDatabase, QFont,QColor
 from components.gradient_label import GradientLabel  # Ensure this is implemented correctly
 from PySide6.QtGui import QImage,QPixmap,QPainter,QPainterPath
+from components.spotify import get_access_token,get_playlist_tracks
+from io import BytesIO
+import requests
+CLIENT_ID = "5c2fcd03261d47199284a7219dfc6fea"
+CLIENT_SECRET = "58c0438e935348d78aa4facfc8ea8e48"
 class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
@@ -17,9 +22,9 @@ class MainWindow(QWidget):
             font_family = QFontDatabase.applicationFontFamilies(font_id)[0]
             custom_font = QFont(font_family,14)
             self.setFont(custom_font)
-        self.setWindowTitle("HiFi - Home")
+        self.setWindowTitle("HiFi")
         self.setMinimumSize(1000, 1000)
-        self.setWindowIcon(QIcon("assets/Banner.png"))
+        self.setWindowIcon(QIcon("assets/Logo.png"))
         self.load_stylesheet("style.css")
 
         
@@ -88,12 +93,22 @@ class MainWindow(QWidget):
         self.log.setCursor(Qt.PointingHandCursor)
         sidebar.addWidget(self.log)
 
+        
+        sidebar.about=QLabel("About Us")
+        sidebar.about.setObjectName("recent")
+        sidebar.addWidget(sidebar.about)
+        self.aboutbtn=QPushButton("About Us")
+        self.aboutbtn.setIcon(QIcon("assets/svgs/about.svg"))
+        self.aboutbtn.setIconSize(QSize(20, 20))
+        self.aboutbtn.setCursor(Qt.PointingHandCursor)
+        sidebar.addWidget(self.aboutbtn)
+        
         # sidebar widget
         sidebar_widget = QWidget()
         sidebar_widget.setLayout(sidebar)
         sidebar_widget.setFixedWidth(190)
         sidebar_widget.setObjectName("sidebar")
-        
+
         # Pages
         self.pages = QStackedWidget()
 
@@ -108,49 +123,135 @@ class MainWindow(QWidget):
         if image.isNull():
             background_label.setStyleSheet("background: red;")  # Fallback to see widget
         else:
+            # Mirror the image horizontally (left-to-right flip)
+            mirrored_image = image.mirrored(True, False)
+
             window_width = self.width() if self.width() > 0 else 800
-            aspect_ratio = image.width() / image.height()
             image_height = int(self.height() * 0.5) if self.height() > 0 else 400
 
-            scaled_pixmap = QPixmap.fromImage(image).scaled(
-                window_width, image_height, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation
+            scaled_pixmap = QPixmap.fromImage(mirrored_image).scaled(
+                window_width, image_height,
+                Qt.KeepAspectRatioByExpanding,
+                Qt.SmoothTransformation
             )
 
-            rounded_pixmap = QPixmap(window_width, image_height)
-            rounded_pixmap.fill(Qt.transparent)
+            # Create transparent pixmap for rounded + filter
+            final_pixmap = QPixmap(window_width, image_height)
+            final_pixmap.fill(Qt.transparent)
 
-            painter = QPainter(rounded_pixmap)
+            painter = QPainter(final_pixmap)
             painter.setRenderHint(QPainter.Antialiasing)
+
+            # Rounded mask
             path = QPainterPath()
-            radius = 15
+            radius = 10
             path.addRoundedRect(0, 0, window_width, image_height, radius, radius)
             painter.setClipPath(path)
+
+            # Draw image
             painter.drawPixmap(0, 0, scaled_pixmap)
+
+            # 🔥 Apply filter: semi-transparent black overlay
+            overlay_color = QColor(0, 0, 0, 100)  # RGBA: A = opacity (0–255) 
+            painter.fillRect(final_pixmap.rect(), overlay_color)
+
             painter.end()
 
-            background_label.setPixmap(rounded_pixmap)
+            # Apply to QLabel
+            background_label.setPixmap(final_pixmap)
             background_label.setScaledContents(True)
         # Layout for labels on top of background
         content_layout = QVBoxLayout(background_label)
-        content_layout.setContentsMargins(10, 10, 10, 10)
-
+        content_layout.setContentsMargins(20,120, 0, 0)
+        content_layout.setAlignment(Qt.AlignTop)
+        content_layout.setSpacing(0)
         # Add labels in front of the background
-        label1 = QLabel("Welcome to the Home Page!")
-        label1.setStyleSheet("font-size: 18px; color: white; background: transparent;")
+        label1 = QLabel()
+        label1.setObjectName("label1")
+        label1.setText('<span style="font-weight: bold;">All the <span style="color: #EE10B0;">Best Songs</span> <br> in One Place</span>')
         content_layout.addWidget(label1)
 
-        label2 = QLabel("Explore our features below")
-        label2.setStyleSheet("font-size: 16px; color: white; background: transparent;")
+        label2 = QLabel()
+        label2.setText('<span>On our app, you can access an amazing collection of popular and new songs</span> <br> <span>Stream your favorite tracks in high quality and enjoy without interruptions </span> <br> <span> Whatever your taste in music, we have it all for you! </span>')
+        label2.setObjectName("label2")
         content_layout.addWidget(label2)
-
+        button=QPushButton("Discover Now")
+        button.setCursor(Qt.PointingHandCursor)
+        button.setObjectName("discover")
+        button.setMaximumWidth(150)
+        button.setFixedHeight(60)
+        content_layout.addWidget(button)
+ 
         # Add background label to home layout
         home.addWidget(background_label)
 
         # Add more content below
-        below_label = QLabel("Additional Content Here")
-        below_label.setStyleSheet("font-size: 16px; color: white;")
+        below_label = QLabel()
+        below_label.setText('<span>Weekly Top</span> <span style="color: #EE10B0;">Songs</span>')
+        below_label.setObjectName("below-label")
         home.addWidget(below_label)
 
+        # Tracks Layout
+        main_track_layout=QHBoxLayout()
+        main_track_layout.setContentsMargins(10,10,10,10)
+        token=get_access_token()
+        tracks=get_playlist_tracks("4SPLJ3VJJF4eIO0eciwQ8Y",token)
+        track_info = []
+        for track in tracks["items"]:
+            track_name = track['track']['name']
+            track_artists = ", ".join([artist['name'] for artist in track['track']['artists']])
+            track_image_url = track['track']['album']['images'][0]['url']  # Get the album artwork
+            
+            track_info.append({
+                "name": track_name,
+                "artists": track_artists,
+                "album_image": track_image_url
+            })
+        for tr in track_info[5:10]:
+            main_child_layout=QVBoxLayout()
+            main_child_layout.setContentsMargins(0,0,0,0)
+            main_child_layout.setAlignment(Qt.AlignCenter)
+            main_child_layout.setSpacing(10)
+            image=QLabel()
+            image_url = tr["album_image"]
+            response = requests.get(image_url)
+            response.raise_for_status()
+            image_data = BytesIO(response.content)
+            pixmap = QPixmap()
+            pixmap.loadFromData(image_data.read())
+            pixmap = pixmap.scaled(140, 150, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
+
+            # Create a new pixmap with rounded corners
+            rounded_pixmap = QPixmap(140, 150)
+            rounded_pixmap.fill(Qt.transparent)  # Transparent background
+            painter = QPainter(rounded_pixmap)
+            path = QPainterPath()
+            path.addRoundedRect(0, 0, 140, 150, 10, 10)  # 10px radius for corners
+            painter.setClipPath(path)
+            painter.drawPixmap(0, 0, pixmap)
+            painter.end()
+            image.setPixmap(rounded_pixmap)
+            image.setCursor(Qt.PointingHandCursor)
+            image.setAlignment(Qt.AlignCenter)
+            image.setObjectName("image-weekly")
+            main_child_layout.addWidget(image)
+            label_name=QLabel(tr["name"])
+            label_name.setObjectName("label-name")
+            label_name.setAlignment(Qt.AlignCenter)
+            main_child_layout.addWidget(label_name)
+            label_name=QLabel(tr["artists"])
+            label_name.setObjectName("artist-name")
+            label_name.setAlignment(Qt.AlignCenter)
+            main_child_layout.addWidget(label_name)
+
+            main_track_layout.addLayout(main_child_layout)
+        button_view=QPushButton(" ")
+        button_view.setIcon(QIcon("assets/svgs/more.svg"))
+        button_view.setCursor(Qt.PointingHandCursor)
+        button_view.setObjectName("button-view")
+        button_view.setIconSize(QSize(40,40))
+        main_track_layout.addWidget(button_view)
+        home.addLayout(main_track_layout)
         # Wrap home layout in QWidget
         homepage_widget = QWidget()
         homepage_widget.setLayout(home)
@@ -174,8 +275,8 @@ class MainWindow(QWidget):
         self.added_page=QLabel("Recently Played 🎵")
         self.played_page=QLabel("Most Played 🎵")
         self.log_page=QLabel("Logout 🎵")
-        
-        for page in [self.search_page, self.recognize_page,self.artist_page,self.added_page,self.played_page,self.log_page]:
+        self.about_page=QLabel("About Us")
+        for page in [self.search_page, self.recognize_page,self.artist_page,self.added_page,self.played_page,self.log_page,self.about_page]:
             page.setObjectName("pageLabel")
             page.setAlignment(Qt.AlignCenter)
             self.pages.addWidget(page)
@@ -188,7 +289,8 @@ class MainWindow(QWidget):
         self.added.clicked.connect(lambda: self.activate_tab(self.added, self.added_page))
         self.played.clicked.connect(lambda: self.activate_tab(self.played, self.played_page))
         self.log.clicked.connect(lambda: self.activate_tab(self.log, self.log_page))
-
+        self.aboutbtn.clicked.connect(lambda: self.activate_tab(self.aboutbtn, self.about_page))
+        button.clicked.connect(lambda: self.activate_tab(self.search_button, self.search_page))
 
 
 
@@ -196,7 +298,7 @@ class MainWindow(QWidget):
         main_layout.addWidget(sidebar_widget, 0)  # 2 show the sidebar width 
         main_layout.addWidget(self.pages, 3)  # 3 show the pages width
     def set_active_button(self, button):
-            for btn in [self.home_button, self.search_button, self.recognize,self.artist,self.added,self.played,self.log]:
+            for btn in [self.home_button, self.search_button, self.recognize,self.artist,self.added,self.played,self.log,self.aboutbtn]:
                 btn.setObjectName("")  # Remove old objectName
                 btn.setStyleSheet("")  # Reset styles if necessary
                 button.setObjectName("active-btn")
@@ -210,8 +312,7 @@ class MainWindow(QWidget):
         if file.open(QFile.ReadOnly | QFile.Text):
             stylesheet = QTextStream(file).readAll()
             self.setStyleSheet(stylesheet)
-    
-
+   
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
