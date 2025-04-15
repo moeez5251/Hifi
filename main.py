@@ -7,12 +7,15 @@ from PySide6.QtCore import Qt, QSize, QFile, QTextStream,QUrl
 from PySide6.QtGui import QIcon
 from PySide6.QtGui import QFontDatabase, QFont,QColor
 from components.gradient_label import GradientLabel  # Ensure this is implemented correctly
-from PySide6.QtGui import QImage,QPixmap,QPainter,QPainterPath
+from PySide6.QtGui import QImage,QPixmap,QPainter,QPainterPath,QTransform
 from components.spotify import get_access_token,get_playlist_tracks
 from io import BytesIO
+from components.clickableimage import ClickableImage
+from components.playbar import PlayBar
 import requests
 CLIENT_ID = "5c2fcd03261d47199284a7219dfc6fea"
 CLIENT_SECRET = "58c0438e935348d78aa4facfc8ea8e48"
+
 class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
@@ -27,7 +30,21 @@ class MainWindow(QWidget):
         self.setWindowIcon(QIcon("assets/Logo.png"))
         self.load_stylesheet("style.css")
 
-        
+
+
+        def on_image_click(track_id):
+            print("Image was clicked!",track_id)
+            track_name = "Track Name"
+            artist = "Artist Name"
+
+            # Remove previous bar if exists
+            if hasattr(main_layout, "play_bar") and main_layout.play_bar:
+                main_layout.removeWidget(main_layout.play_bar)
+                main_layout.play_bar.deleteLater()
+
+            # Create new play bar and add to layout
+            main_layout.play_bar = PlayBar(track_name, artist)
+            main_layout.addWidget(main_layout.play_bar)
         # Layouts
         main_layout = QHBoxLayout(self)
 
@@ -124,7 +141,8 @@ class MainWindow(QWidget):
             background_label.setStyleSheet("background: red;")  # Fallback to see widget
         else:
             # Mirror the image horizontally (left-to-right flip)
-            mirrored_image = image.mirrored(True, False)
+            transform = QTransform().scale(-1, 1)
+            mirrored_image =image.transformed(transform, Qt.SmoothTransformation)
 
             window_width = self.width() if self.width() > 0 else 800
             image_height = int(self.height() * 0.5) if self.height() > 0 else 400
@@ -166,7 +184,7 @@ class MainWindow(QWidget):
         content_layout.setAlignment(Qt.AlignTop)
         content_layout.setSpacing(0)
         # Add labels in front of the background
-        label1 = QLabel()
+        label1 = QLabel() 
         label1.setObjectName("label1")
         label1.setText('<span style="font-weight: bold;">All the <span style="color: #EE10B0;">Best Songs</span> <br> in One Place</span>')
         content_layout.addWidget(label1)
@@ -191,72 +209,83 @@ class MainWindow(QWidget):
         below_label.setObjectName("below-label")
         home.addWidget(below_label)
 
-        # Tracks Layout
+        # Tracks Layout 
         main_track_layout=QHBoxLayout()
         main_track_layout.setContentsMargins(10,10,10,10)
-        token=get_access_token()
-        tracks=get_playlist_tracks("4SPLJ3VJJF4eIO0eciwQ8Y",token)
-        track_info = []
-        for track in tracks["items"]:
-            track_name = track['track']['name']
-            track_artists = ", ".join([artist['name'] for artist in track['track']['artists']])
-            track_image_url = track['track']['album']['images'][0]['url']  # Get the album artwork
-            
-            track_info.append({
-                "name": track_name,
-                "artists": track_artists,
-                "album_image": track_image_url
-            })
-        for tr in track_info[5:10]:
-            main_child_layout=QVBoxLayout()
-            main_child_layout.setContentsMargins(0,0,0,0)
-            main_child_layout.setAlignment(Qt.AlignCenter)
-            main_child_layout.setSpacing(10)
-            image=QLabel()
-            image_url = tr["album_image"]
-            response = requests.get(image_url)
-            response.raise_for_status()
-            image_data = BytesIO(response.content)
-            pixmap = QPixmap()
-            pixmap.loadFromData(image_data.read())
-            pixmap = pixmap.scaled(140, 150, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
+        try:
+            token=get_access_token()
+            tracks=get_playlist_tracks("4SPLJ3VJJF4eIO0eciwQ8Y",token)
+            track_info = []
+            for track in tracks["items"]:
+                track_name = track['track']['name']
+                track_artists = ", ".join([artist['name'] for artist in track['track']['artists']])
+                track_image_url = track['track']['album']['images'][0]['url']  # Get the album artwork
+                track=track['track']['id']
+                track_info.append({
+                    "name": track_name,
+                    "artists": track_artists,
+                    "album_image": track_image_url,
+                    "href":track
+                })
+            print(track_info[0])
+            for tr in track_info[5:10]:
+                main_child_layout=QVBoxLayout()
+                main_child_layout.setContentsMargins(0,0,0,0)
+                main_child_layout.setAlignment(Qt.AlignCenter)
+                main_child_layout.setSpacing(10)
+                image=ClickableImage(track_id=tr["href"])
+                image_url = tr["album_image"]
+                response = requests.get(image_url)
+                response.raise_for_status()
+                image_data = BytesIO(response.content)
+                pixmap = QPixmap()
+                pixmap.loadFromData(image_data.read())
+                pixmap = pixmap.scaled(140, 150, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
 
-            # Create a new pixmap with rounded corners
-            rounded_pixmap = QPixmap(140, 150)
-            rounded_pixmap.fill(Qt.transparent)  # Transparent background
-            painter = QPainter(rounded_pixmap)
-            path = QPainterPath()
-            path.addRoundedRect(0, 0, 140, 150, 10, 10)  # 10px radius for corners
-            painter.setClipPath(path)
-            painter.drawPixmap(0, 0, pixmap)
-            painter.end()
-            image.setPixmap(rounded_pixmap)
-            image.setCursor(Qt.PointingHandCursor)
-            image.setAlignment(Qt.AlignCenter)
-            image.setObjectName("image-weekly")
-            main_child_layout.addWidget(image)
-            label_name=QLabel(tr["name"])
-            label_name.setObjectName("label-name")
-            label_name.setAlignment(Qt.AlignCenter)
-            main_child_layout.addWidget(label_name)
-            label_name=QLabel(tr["artists"])
-            label_name.setObjectName("artist-name")
-            label_name.setAlignment(Qt.AlignCenter)
-            main_child_layout.addWidget(label_name)
+                # Create a new pixmap with rounded corners
+                rounded_pixmap = QPixmap(140, 150)
+                rounded_pixmap.fill(Qt.transparent)  # Transparent background
+                painter = QPainter(rounded_pixmap)
+                path = QPainterPath()
+                path.addRoundedRect(0, 0, 140, 150, 10, 10)  # 10px radius for corners
+                painter.setClipPath(path)
+                painter.drawPixmap(0, 0, pixmap)
+                painter.end()
+                image.setPixmap(rounded_pixmap)
+                image.setCursor(Qt.PointingHandCursor)
+                image.setAlignment(Qt.AlignCenter)
+                image.setObjectName("image-weekly")
+                image.clicked.connect(on_image_click)
+                main_child_layout.addWidget(image)
+                label_name=QLabel(tr["name"])
+                label_name.setObjectName("label-name")
+                label_name.setAlignment(Qt.AlignCenter)
+                label_name.setWordWrap(True)  # Enable wrapping
+                label_name.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+                main_child_layout.addWidget(label_name)
+                label_name=QLabel(tr["artists"])
+                label_name.setObjectName("artist-name")
+                label_name.setAlignment(Qt.AlignCenter)
+                main_child_layout.addWidget(label_name)
 
-            main_track_layout.addLayout(main_child_layout)
-        button_view=QPushButton(" ")
-        button_view.setIcon(QIcon("assets/svgs/more.svg"))
-        button_view.setCursor(Qt.PointingHandCursor)
-        button_view.setObjectName("button-view")
-        button_view.setIconSize(QSize(40,40))
-        main_track_layout.addWidget(button_view)
-        home.addLayout(main_track_layout)
+                main_track_layout.addLayout(main_child_layout)
+            button_view=QPushButton("Show More")
+            button_view.setIcon(QIcon("assets/svgs/more.svg"))
+            button_view.setCursor(Qt.PointingHandCursor)
+            button_view.setObjectName("button-view")
+            button_view.setIconSize(QSize(40,40))
+            main_track_layout.addWidget(button_view)
+        except Exception as e:
+            print(e)
+            not_label=QLabel("No Playlist Found")
+            not_label.setObjectName("no-playlist")
+            not_label.setAlignment(Qt.AlignCenter)
+            main_track_layout.addWidget(not_label)
         # Wrap home layout in QWidget
+        home.addLayout(main_track_layout)
         homepage_widget = QWidget()
         homepage_widget.setLayout(home)
         homepage_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-
         # Scroll area
         home_scroll_area = QScrollArea()
         home_scroll_area.setWidget(homepage_widget)
@@ -312,7 +341,7 @@ class MainWindow(QWidget):
         if file.open(QFile.ReadOnly | QFile.Text):
             stylesheet = QTextStream(file).readAll()
             self.setStyleSheet(stylesheet)
-   
+    
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

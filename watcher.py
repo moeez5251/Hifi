@@ -3,41 +3,45 @@ import time
 import os
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
+import threading
+
 class ReloadHandler(FileSystemEventHandler):
     def __init__(self, file_to_run):
         self.file_to_run = file_to_run
+        self.process = None
+        self.last_modified = time.time()
+        self.python_path = os.path.join(os.getcwd(), 'venv', 'Scripts', 'python.exe')
+        self.start_process()
 
-        # Explicitly use the Python executable from the virtual environment
-        python_path = os.path.join(os.getcwd(), 'venv', 'Scripts', 'python.exe')
+    def start_process(self):
+        if self.process:
+            self.process.kill()
 
-        # Run the script in the background using the virtual environment's Python interpreter
+        print(f"\n🔁 Restarting {self.file_to_run}...\n")
         self.process = subprocess.Popen(
-            [python_path, self.file_to_run], 
-            stdout=subprocess.PIPE, 
-            stderr=subprocess.PIPE
+            [self.python_path, self.file_to_run],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            bufsize=1,
+            universal_newlines=True
         )
 
-    def on_any_event(self, event):
-        print("Changes detected. Reloading...")
-        self.process.kill()
-        # Restart the script using the virtual environment's Python interpreter
-        python_path = os.path.join(os.getcwd(), 'venv', 'Scripts', 'python.exe')
-        self.process = subprocess.Popen(
-            [python_path, self.file_to_run], 
-            stdout=subprocess.PIPE, 
-            stderr=subprocess.PIPE
-        )
+        # Start a thread to read the output
+        threading.Thread(target=self.read_output, daemon=True).start()
 
     def read_output(self):
-        # Reading stdout and stderr
-        stdout, stderr = self.process.communicate()
-        if stdout:
-            print(stdout.decode("utf-8"))
-        if stderr:
-            print("Error:", stderr.decode("utf-8"))
+        for line in self.process.stdout:
+            print(line.strip())
+
+    def on_modified(self, event):
+        if event.src_path.endswith(".py") or event.src_path.endswith(".css"):
+            now = time.time()
+            if now - self.last_modified > 0.5:
+                self.last_modified = now
+                self.start_process()
 
 if __name__ == "__main__":
-    path = "."  # current directory
+    path = "."  # Watch current directory
     file_to_run = "main.py"
 
     event_handler = ReloadHandler(file_to_run)
@@ -48,7 +52,6 @@ if __name__ == "__main__":
     try:
         while True:
             time.sleep(1)
-            event_handler.read_output()  # Read process output
     except KeyboardInterrupt:
         observer.stop()
 
