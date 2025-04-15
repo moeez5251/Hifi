@@ -107,3 +107,23 @@ QScrollBar::sub-line:vertical {
     background-color: black;
 
 }
+#playbar-content {
+    background-color: transparent;
+}
+
+#track-label {
+    color: #FFFFFF;
+    font-weight: bold;
+    font-size: 16px;
+}
+
+#artist-label {
+    color: #B0B0C0;
+    font-size: 14px;
+}
+
+#time-label {
+    color: #EE10B0;
+    font-size: 14px;
+}
+
