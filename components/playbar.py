@@ -19,7 +19,7 @@ class PlayBar(QWidget):
         self.main_layout.setContentsMargins(20, 10, 20, 10)
         self.main_layout.setSpacing(15)
         self.main_layout.setAlignment(Qt.AlignCenter)
-
+       
         # Play/Pause button
         self.play_button = QPushButton()
         self.play_button.setObjectName("play-button")
@@ -105,7 +105,6 @@ class PlayBar(QWidget):
             #playbar {{
                 {background}
                 border: {'' if is_maximized else '1px solid #3B3B4F'};
-                transition: all 0.3s ease;
             }}
             #seek-bar {{
                 height: {10 if is_maximized else 8}px;
@@ -201,8 +200,18 @@ class PlayBar(QWidget):
 
     def close_player(self):
         """Remove the playbar"""
-        self.hide()
-        self.deleteLater()
+        # Disconnect any signals to prevent further interactions
+        try:
+            self.play_button.clicked.disconnect()
+            self.toggle_button.clicked.disconnect()
+            self.close_button.clicked.disconnect()
+        except:
+            pass  # Ignore if signals are already disconnected
+        
+        # Remove from layout and schedule deletion
+        if self.parent():
+            self.setParent(None)  # Detach from parent to remove from layout
+        self.deleteLater()  # Schedule deletion
 
     def resizeEvent(self, event):
         """Ensure playbar covers the entire parent in full-screen mode"""
@@ -211,3 +220,5 @@ class PlayBar(QWidget):
             if parent:
                 self.setGeometry(parent.geometry())
         super().resizeEvent(event)
+    def play_track(self, track_id):
+        self.player_web.play_track(track_id)

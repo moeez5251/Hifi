@@ -8,7 +8,7 @@ from PySide6.QtGui import QIcon
 from PySide6.QtGui import QFontDatabase, QFont,QColor
 from components.gradient_label import GradientLabel  # Ensure this is implemented correctly
 from PySide6.QtGui import QImage,QPixmap,QPainter,QPainterPath,QTransform
-from components.spotify import get_access_token,get_playlist_tracks
+from components.playlist import get_access_token,get_playlist_tracks
 from io import BytesIO
 from components.clickableimage import ClickableImage
 from components.playbar import PlayBar
@@ -27,7 +27,7 @@ class MainWindow(QWidget):
             self.setFont(custom_font)
         self.setWindowTitle("HiFi")
         self.setMinimumSize(1000, 1000)
-        self.setWindowIcon(QIcon("assets/Logo.png"))
+        self.setWindowIcon(QIcon("assets/Logo.png"))    
         self.load_stylesheet("style.css")
 
         # Main layout
@@ -200,10 +200,19 @@ class MainWindow(QWidget):
         self.playbar = None
         def on_image_click(track_id, track_name, artist_name):
             print("Image was clicked!", track_id)
+            
+            # Remove the existing playbar if it exists and is not deleted
             if self.playbar is not None:
-                self.playbar.deleteLater()
+                try:
+                    self.playbar.close_player()  # Call close_player to hide and delete
+                except RuntimeError:
+                    # Ignore if the playbar is already deleted
+                    pass
+                self.playbar = None  # Clear the reference
+
+            # Create a new playbar
             self.playbar = PlayBar(self)  # Pass self as parent
-            main_layout.addWidget(self.playbar)
+            main_layout.addWidget(self.playbar)  # Add to the main layout
             self.playbar.update_track_info(track_name, artist_name, "3:45")
 
         try:
