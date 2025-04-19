@@ -8,7 +8,7 @@ from PySide6.QtGui import QIcon
 from PySide6.QtGui import QFontDatabase, QFont,QColor
 from components.gradient_label import GradientLabel  # Ensure this is implemented correctly
 from PySide6.QtGui import QImage,QPixmap,QPainter,QPainterPath,QTransform
-from components.playlist import get_access_token,get_playlist_tracks
+from components.playlist import get_pakistan_related_tracks
 from io import BytesIO
 from components.clickableimage import ClickableImage
 from components.playbar import PlayBar
@@ -216,22 +216,22 @@ class MainWindow(QWidget):
             self.playbar.update_track_info(track_name, artist_name, "3:45")
 
         try:
-            token = get_access_token()
-            tracks = get_playlist_tracks("4SPLJ3VJJF4eIO0eciwQ8Y", token)
+            # token = get_access_token()
+            tracks = get_pakistan_related_tracks()
             track_info = []
-            for track in tracks["items"]:
-                track_name = track['track']['name']
-                track_artists = ", ".join([artist['name'] for artist in track['track']['artists']])
-                track_image_url = track['track']['album']['images'][0]['url']
-                track = track['track']['id']
+            for track in tracks["results"]:
+                track_name = track['name']
+                track_artists = track["artist_name"]
+                track_image_url = track["album_image"]
+                href = track['id']
                 track_info.append({
                     "name": track_name,
                     "artists": track_artists,
                     "album_image": track_image_url,
-                    "href": track
+                    "href":href
                 })
-            print(track_info[0])
-            for tr in track_info[5:10]:
+            print(track_info)
+            for tr in track_info[2:7]:
                 main_child_layout = QVBoxLayout()
                 main_child_layout.setContentsMargins(0, 0, 0, 0)
                 main_child_layout.setAlignment(Qt.AlignCenter)
