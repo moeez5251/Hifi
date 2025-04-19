@@ -34,7 +34,7 @@ def get_pakistan_related_tracks():
         "format": "json",
         "tags": "love",
         "order": "popularity_total",
-        "limit": 10
+        "limit": 20
     }
     response = requests.get(url, params=params)
     
