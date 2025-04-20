@@ -21,7 +21,6 @@ CLIENT_ID = "8b958168"
 #         if response.status_code == 200:
 #             return response.json().get("access_token")
 #         else:
-#             print(f"Error fetching access token: {response.status_code}")
 #             return None
 
 
@@ -34,10 +33,21 @@ def get_pakistan_related_tracks():
         "format": "json",
         "tags": "love",
         "order": "popularity_total",
-        "limit": 20
+        "limit": 22
     }
     response = requests.get(url, params=params)
     
     return response.json()
-
-tracs=get_pakistan_related_tracks()
+def get_new_songs():
+    client_id = "8b958168"  # Replace with your actual client_id
+    url = f"https://api.jamendo.com/v3.0/tracks"
+    params = {
+        "client_id": client_id,
+        "format": "json",
+        "tags": "sad",
+        "order": "popularity_total",
+        "limit": 22
+    }
+    response = requests.get(url, params=params)
+    
+    return response.json()

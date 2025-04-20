@@ -413,6 +413,5 @@ class PlayBar(QWidget):
             if self.is_maximized:
                 self.animation_timer.start(33)  # Start background animation
         except Exception as e:
-            print(f"Error loading audio: {e}")
             self.track_label.setText("Error loading track")
             self.audio.setSource(QUrl())
