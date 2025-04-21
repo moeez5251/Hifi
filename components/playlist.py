@@ -1,12 +1,5 @@
 import requests
-import webbrowser
-from http.server import BaseHTTPRequestHandler, HTTPServer
-from urllib.parse import urlparse, parse_qs
-import threading
-import os
-import signal
-import sys
-
+import yt_dlp
 CLIENT_ID = "8b958168"
 
 # def get_access_token():
@@ -51,3 +44,34 @@ def get_new_songs():
     response = requests.get(url, params=params)
     
     return response.json()
+def get_audio_info(query):
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'quiet': True,
+        'noplaylist': True,
+        'default_search': 'ytsearch1',
+    }
+
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(query, download=False)
+        if 'entries' in info:
+            info = info['entries'][0]
+
+        result = {
+            "title": info.get("title"),
+            "artist": info.get("uploader"),
+            "thumbnail": info.get("thumbnail"),
+            "audio_url": info.get("url"),
+            "video_url": info.get("webpage_url"),
+            "duration": info.get("duration"),
+        }
+
+        return result
+
+# Example usage
+track = get_audio_info("Jhol Coke Studio")
+print("🎵 Title:", track["title"])
+print("🧑‍🎤 Artist:", track["artist"])
+print("🖼️ Thumbnail:", track["thumbnail"])
+print("🔗 Audio URL:", track["audio_url"])
+print("📺 Video URL:", track["video_url"])
