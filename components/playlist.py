@@ -1,6 +1,6 @@
 import requests
 import yt_dlp
-youtube_api_key="AIzaSyDMNhU8ZpkIOV1wAuPo6dc7yarfLnqEC0A1"
+youtube_api_key="AIzaSyDMNhU8ZpkIOV1wAuPo6dc7yarfLnqEC0A"
 # def get_access_token():
 #         url = "https://accounts.spotify.com/api/token"
 #         headers = {

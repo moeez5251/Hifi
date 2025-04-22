@@ -768,16 +768,18 @@ class MainWindow(QWidget):
         newly_scroll_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         newly_scroll_area.setStyleSheet("QScrollArea { border: none; }")        
         self.pages.addWidget(newly_scroll_area)
+
        
-        def searchfunc():
-            print(inputfield.text())
           # Search page
+      # Search page
         search = QVBoxLayout()
         search.setSpacing(20)
         search.setAlignment(Qt.AlignTop)
         search.setContentsMargins(20, 20, 20, 0)
-        top_layout=QHBoxLayout()
-        inputfield=QLineEdit()
+
+        # Top layout for input and button
+        top_layout = QHBoxLayout()
+        inputfield = QLineEdit()
         inputfield.setPlaceholderText("Search Music 🔎")
         inputfield.setStyleSheet("""
             QLineEdit {
@@ -785,33 +787,156 @@ class MainWindow(QWidget):
                 border-radius: 8px;
                 padding: 10px 4px;
                 font-size: 15px;
-                color:black
+                color: black;
             }
             QLineEdit:focus {
                 background-color: #ffffff; 
             }
         """)
         top_layout.addWidget(inputfield)
-        Search_button=QPushButton("Search")
-        Search_button.setIcon(QIcon("assets/svgs/search.svg"))
-        Search_button.setIconSize(QSize(20, 20))    
-        Search_button.setObjectName("search-button")
-        Search_button.setCursor(Qt.PointingHandCursor)  
-        Search_button.clicked.connect(searchfunc)
-        # Search_button.s 
-        top_layout.addWidget(Search_button)
 
+        search_button = QPushButton("Search")
+        search_button.setIcon(QIcon("assets/svgs/search.svg"))
+        search_button.setIconSize(QSize(20, 20))
+        search_button.setObjectName("search-button")
+        search_button.setCursor(Qt.PointingHandCursor)
+        top_layout.addWidget(search_button)
 
         search.addLayout(top_layout)
-        # search_content=""
-        # search_layout=QVBoxLayout()
-        # search_layout.setContentsMargins(0, 0, 0, 0)
-        
 
+        # Search results layout
+        self.search_layout = QVBoxLayout()
+        self.search_layout.setContentsMargins(0, 0, 0, 0)
+        self.search_layout.setSpacing(20)
+
+        # Default "No results found" label
+        self.no_results_label = QLabel("No results found")
+        self.no_results_label.setObjectName("no-playlist")
+        self.no_results_label.setAlignment(Qt.AlignCenter)
+        self.search_layout.addWidget(self.no_results_label)
+
+        def update_search_ui(search_query):
+            # Clear previous content in search_layout
+            while self.search_layout.count():
+                item = self.search_layout.takeAt(0)
+                widget = item.widget()
+                if widget:
+                    widget.deleteLater()
+
+            if not search_query:
+                # Show "No results found" if query is empty
+                no_results_label = QLabel("No results found")
+                no_results_label.setObjectName("no-playlist")
+                no_results_label.setAlignment(Qt.AlignCenter)
+                self.search_layout.addWidget(no_results_label)
+                return
+
+            # Add header for search results
+            results_header = QLabel(f"Results for '{search_query}'")
+            results_header.setObjectName("below-label")
+            self.search_layout.addWidget(results_header)
+
+            try:
+                # Fetch search results from YouTube
+                tracks = search_youtube(search_query, 10)  # Limit to 10 results for performance
+                track_info = []
+                for track in tracks:
+                    track_name = track['title'][:30]
+                    track_artists = track["name"][:30]
+                    track_image_url = track["thumbnail"]
+                    url = track['video_id']
+                    track_info.append({
+                        "name": track_name,
+                        "artists": track_artists,
+                        "album_image": track_image_url,
+                        "url": url
+                    })
+
+                # Create a horizontal layout for each row (5 tracks per row)
+                row_layout = QHBoxLayout()
+                row_layout.setContentsMargins(10, 10, 10, 10)
+                row_layout.setSpacing(10)
+
+                for i, tr in enumerate(track_info):
+                    main_child_layout = QVBoxLayout()
+                    main_child_layout.setContentsMargins(0, 0, 0, 0)
+                    main_child_layout.setAlignment(Qt.AlignCenter)
+                    main_child_layout.setSpacing(10)
+
+                    # Create clickable image
+                    image = ClickableImage(track_id=tr["url"])
+                    image_url = tr["album_image"]
+                    response = requests.get(image_url)
+                    response.raise_for_status()
+                    image_data = BytesIO(response.content)
+                    pixmap = QPixmap()
+                    pixmap.loadFromData(image_data.read())
+                    pixmap = pixmap.scaled(140, 150, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
+
+                    rounded_pixmap = QPixmap(140, 150)
+                    rounded_pixmap.fill(Qt.transparent)
+                    painter = QPainter(rounded_pixmap)
+                    path = QPainterPath()
+                    path.addRoundedRect(0, 0, 140, 150, 10, 10)
+                    painter.setClipPath(path)
+                    painter.drawPixmap(0, 0, pixmap)
+                    painter.end()
+
+                    image.setPixmap(rounded_pixmap)
+                    image.setCursor(Qt.PointingHandCursor)
+                    image.setAlignment(Qt.AlignCenter)
+                    image.setObjectName("image-weekly")
+                    image.clicked.connect(
+                        lambda checked, turl=tr["url"], tname=tr["name"], tartist=tr["artists"]:
+                        on_image_click(turl, tname, tartist)
+                    )
+                    main_child_layout.addWidget(image)
+
+                    # Track name
+                    label_name = QLabel(tr["name"])
+                    label_name.setObjectName("label-name")
+                    label_name.setAlignment(Qt.AlignCenter)
+                    label_name.setWordWrap(True)
+                    label_name.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+                    main_child_layout.addWidget(label_name)
+
+                    # Artist name
+                    label_name = QLabel(tr["artists"])
+                    label_name.setObjectName("artist-name")
+                    label_name.setAlignment(Qt.AlignCenter)
+                    main_child_layout.addWidget(label_name)
+
+                    row_layout.addLayout(main_child_layout)
+
+                    # Start a new row after every 5 tracks
+                    if (i + 1) % 5 == 0 or i == len(track_info) - 1:
+                        self.search_layout.addLayout(row_layout)
+                        row_layout = QHBoxLayout()
+                        row_layout.setContentsMargins(10, 10, 10, 10)
+                        row_layout.setSpacing(10)
+
+                # Add stretch to push content up
+                self.search_layout.addStretch()
+
+            except Exception as e:
+                # Show error message if search fails
+                error_label = QLabel("Failed to fetch results")
+                error_label.setObjectName("no-playlist")
+                error_label.setAlignment(Qt.AlignCenter)
+                self.search_layout.addWidget(error_label)
+
+        def searchfunc():
+            search_query = inputfield.text().strip()
+            update_search_ui(search_query)
+
+        # Connect search button and input field
+        search_button.clicked.connect(searchfunc)
+        inputfield.returnPressed.connect(searchfunc)
+
+        search.addLayout(self.search_layout)
         searchpage_widget = QWidget()
         searchpage_widget.setLayout(search)
         searchpage_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-
 
         search_scroll_area = QScrollArea()
         search_scroll_area.setWidget(searchpage_widget)
@@ -821,7 +946,6 @@ class MainWindow(QWidget):
         search_scroll_area.setStyleSheet("QScrollArea { border: none; }")
 
         self.pages.addWidget(search_scroll_area)
-
 
 
 

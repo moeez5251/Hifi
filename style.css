@@ -133,3 +133,30 @@ QScrollBar::sub-line:vertical {
     font-size: 13px;
     font-weight: bold;
 }
+QLabel#searching {
+    font-size: 18px;
+    color: white;
+    font-weight: bold;
+}
+QLabel#no-playlist {
+    font-size: 16px;
+    color: #888;
+}
+QLabel#below-label {
+    font-size: 24px;
+    font-weight: bold;
+    color: #fff;
+}
+QLabel#label-name {
+    font-size: 14px;
+    color: #fff;
+    text-align: center;
+}
+QLabel#artist-name {
+    font-size: 12px;
+    color: #aaa;
+    text-align: center;
+}
+QLabel#image-weekly {
+    border-radius: 10px;
+}
