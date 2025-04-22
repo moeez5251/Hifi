@@ -123,6 +123,13 @@ QScrollBar::sub-line:vertical {
 }
 
 #time-label {
-    color: #EE10B0;
+    color: white;
     font-size: 14px;
+}
+#search-button{
+    background-color: #EE10B0;
+    color: white;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: bold;
 }

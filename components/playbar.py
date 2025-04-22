@@ -1,8 +1,43 @@
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton, QSlider, QSizePolicy
-from PySide6.QtCore import Qt, QSize, QPropertyAnimation, QRect, QTimer, QUrl
-from PySide6.QtGui import QIcon
+from PySide6.QtCore import Qt, QSize, QPropertyAnimation, QRect, QTimer, QUrl, QThread, Signal
+from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 import math
+import requests
+from components.playlist import get_audio_info_by_id
+
+class AudioLoaderThread(QThread):
+    """Thread to load audio info and thumbnail asynchronously"""
+    data_loaded = Signal(dict)  # Signal to emit loaded data
+    error_occurred = Signal(str)  # Signal to emit error message
+
+    def __init__(self, video_id):
+        super().__init__()
+        self.video_id = video_id
+
+    def run(self):
+        """Run network operations in a separate thread"""
+        try:
+            # Fetch audio info
+            audio_info = get_audio_info_by_id(self.video_id)
+            audio_url = audio_info["audio_url"]
+            track_name = audio_info["title"]
+            artist_name = audio_info["artist"]
+            thumbnail_url = audio_info["thumbnail"]
+
+            # Fetch thumbnail
+            response = requests.get(thumbnail_url)
+            thumbnail_data = response.content
+
+            # Emit loaded data
+            self.data_loaded.emit({
+                "audio_url": audio_url,
+                "track_name": track_name,
+                "artist_name": artist_name,
+                "thumbnail_data": thumbnail_data
+            })
+        except Exception as e:
+            self.error_occurred.emit(str(e))
 
 class PlayBar(QWidget):
     def __init__(self, parent=None):
@@ -38,6 +73,13 @@ class PlayBar(QWidget):
         self.main_layout.setSpacing(15)
         self.main_layout.setAlignment(Qt.AlignCenter)
        
+        # Thumbnail label
+        self.thumbnail_label = QLabel()
+        self.thumbnail_label.setObjectName("thumbnail-label")
+        self.thumbnail_label.setFixedSize(60, 60)  # Normal state: 60x60
+        self.thumbnail_label.setScaledContents(True)
+        self.main_layout.addWidget(self.thumbnail_label)
+
         # Play/Pause button
         self.play_button = QPushButton()
         self.play_button.setObjectName("play-button")
@@ -71,6 +113,8 @@ class PlayBar(QWidget):
         self.seek_bar.setFixedWidth(200)
         self.seek_bar.setCursor(Qt.PointingHandCursor)
         self.seek_bar.valueChanged.connect(self.seek)
+        self.audio.positionChanged.connect(self.update_position)
+        self.audio.durationChanged.connect(self.update_duration)
         self.main_layout.addWidget(self.seek_bar)
 
         # Time label
@@ -114,8 +158,10 @@ class PlayBar(QWidget):
             "artist": 18 if is_maximized else 14,
             "time": 16 if is_maximized else 14
         }
+        thumbnail_size = 100 if is_maximized else 60  # Square thumbnail: 100x100 in maximized
         background = """
-            background: #000000;
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                stop:0 #87CEEB, stop:1 #00B7EB);
         """ if is_maximized else """
             background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
                 stop:0 #1E1E2F, stop:0.5 #EE10B0, stop:1 #3B3B4F);
@@ -158,24 +204,29 @@ class PlayBar(QWidget):
                 color: #FFFFFF;
                 font-weight: bold;
                 font-size: {font_sizes['track']}px;
-                padding: 5px;
-                border-radius: 5px;
+                background: transparent;
             }}
             #artist-label {{
-                color: #B0B0C0;
+                color: #FFFFFF;
                 font-size: {font_sizes['artist']}px;
-                padding: 5px;
-                border-radius: 5px;
+                background: transparent;
             }}
             #time-label {{
-                color: #EE10B0;
+                color: white;
                 font-size: {font_sizes['time']}px;
-                padding: 5px;
-                border-radius: 5px;
+                background: transparent;
+            }}
+            #thumbnail-label {{
+                border: none;
+                background: transparent;
+                width: {thumbnail_size}px;
+                height: {thumbnail_size}px;
             }}
         """)
-        # Reset animation phases and stop timer when not maximized
-        if not is_maximized:
+        # Update thumbnail size dynamically
+        self.thumbnail_label.setFixedSize(thumbnail_size, thumbnail_size)
+        # Stop animation timer if maximized
+        if is_maximized:
             self.animation_phase = 0.0
             self.secondary_phase = 0.0
             self.animation_timer.stop()
@@ -183,8 +234,8 @@ class PlayBar(QWidget):
             self.animation_timer.start(33)  # Update every 33ms for smoother animation (~30 FPS)
 
     def update_background_animation(self):
-        """Update the background with a realistic, unbelievable beat-like animation"""
-        if not (self.is_maximized and self.is_playing):
+        """Update the background with a beat-like animation (only in non-maximized state)"""
+        if self.is_maximized or not self.is_playing:
             self.animation_timer.stop()
             return
 
@@ -197,7 +248,6 @@ class PlayBar(QWidget):
 
         # Primary pulse (radial-like effect with color shift)
         pulse1 = (math.sin(self.animation_phase) + 1) / 2  # 0 to 1
-        pulse2 = (math.sin(self.animation_phase * 1.5 + math.pi / 2) + 1) / 2  # Offset, faster
         color_r = int(238 * pulse1 + 0 * (1 - pulse1))  # Shift between #EE10B0 and darker
         color_g = int(16 * pulse1 + 30 * (1 - pulse1))
         color_b = int(176 * pulse1 + 79 * (1 - pulse1))
@@ -229,25 +279,25 @@ class PlayBar(QWidget):
                 {animated_background}
             }}
             #seek-bar {{
-                height: 10px;
+                height: 8px;
                 background: #3B3B4F;
-                border-radius: 5px;
+                border-radius: 4px;
                 margin: 0 10px;
             }}
             #seek-bar::groove:horizontal {{
                 background: #3B3B4F;
-                border-radius: 5px;
+                border-radius: 4px;
             }}
             #seek-bar::handle:horizontal {{
                 background: #EE10B0;
-                border-radius: 8px;
-                width: 16px;
-                height: 16px;
-                margin: -3px 0;
+                border-radius: 6px;
+                width: 12px;
+                height: 12px;
+                margin: -2px 0;
             }}
             #seek-bar::sub-page:horizontal {{
                 background: #EE10B0;
-                border-radius: 5px;
+                border-radius: 4px;
             }}
             #play-button, #toggle-button, #close-button {{
                 background: transparent;
@@ -260,21 +310,22 @@ class PlayBar(QWidget):
             #track-label {{
                 color: #FFFFFF;
                 font-weight: bold;
-                font-size: 24px;
-                padding: 5px;
-                border-radius: 5px;
+                font-size: 16px;
+                background: transparent;
             }}
             #artist-label {{
-                color: #B0B0C0;
-                font-size: 18px;
-                padding: 5px;
-                border-radius: 5px;
+                color: #FFFFFF;
+                font-size: 14px;
+                background: transparent;
             }}
             #time-label {{
-                color: #EE10B0;
-                font-size: 16px;
-                padding: 5px;
-                border-radius: 5px;
+                color: white;
+                font-size: 14px;
+                background: transparent;
+            }}
+            #thumbnail-label {{
+                border: none;
+                background: transparent;
             }}
         """)
 
@@ -297,6 +348,20 @@ class PlayBar(QWidget):
             self.seek_bar.setMaximum(100)
             self.time_label.setText("0:00 / 0:00")
 
+    def update_duration(self, duration):
+        """Update seek bar maximum when duration is available"""
+        if duration > 0:
+            self.seek_bar.setMaximum(int(duration / 1000))  # Convert ms to seconds
+            self.time_label.setText(f"0:00 / {self.format_time(duration / 1000)}")
+
+    def update_position(self, position):
+        """Update seek bar and time label with current position"""
+        if not self.seek_bar.isSliderDown():
+            current_time = position / 1000  # Convert ms to seconds
+            self.seek_bar.setValue(int(current_time))
+            duration = self.audio.duration() / 1000 if self.audio.duration() > 0 else 0
+            self.time_label.setText(f"{self.format_time(current_time)} / {self.format_time(duration)}")
+
     def toggle_play(self):
         """Toggle between play and pause states"""
         if not self.audio.source().isValid():
@@ -309,8 +374,8 @@ class PlayBar(QWidget):
         if self.is_playing:
             self.audio.play()
             self.time_update_timer.start(1000)  # Update every second
-            if self.is_maximized:
-                self.animation_timer.start(33)  # Start background animation
+            if not self.is_maximized:
+                self.animation_timer.start(33)  # Start background animation only if not maximized
         else:
             self.audio.pause()
             self.time_update_timer.stop()
@@ -321,7 +386,7 @@ class PlayBar(QWidget):
         """Update the time label and seek bar position"""
         if self.audio.isAvailable() and not self.seek_bar.isSliderDown():
             current_time = self.audio.position() / 1000  # Convert ms to seconds
-            duration = self.audio.duration() / 1000  # Convert ms to seconds
+            duration = self.audio.duration() / 1000 if self.audio.duration() > 0 else 0
             self.seek_bar.setValue(int(current_time))
             self.time_label.setText(f"{self.format_time(current_time)} / {self.format_time(duration)}")
 
@@ -344,15 +409,12 @@ class PlayBar(QWidget):
             self.raise_()
             self.seek_bar.setFixedWidth(400)
             self.update_stylesheet(True)
-            if self.is_playing:
-                self.animation_timer.start(33)  # Start background animation
         else:
             self.animation.setStartValue(self.geometry())
             self.animation.setEndValue(self.normal_geometry)
             self.lower()
             self.seek_bar.setFixedWidth(200)
             self.update_stylesheet(False)
-            self.animation_timer.stop()  # Stop background animation
 
         icon = "assets/svgs/minimize.svg" if self.is_maximized else "assets/svgs/maximize.svg"
         self.toggle_button.setIcon(QIcon(icon))
@@ -373,6 +435,8 @@ class PlayBar(QWidget):
             self.toggle_button.clicked.disconnect()
             self.close_button.clicked.disconnect()
             self.seek_bar.valueChanged.disconnect()
+            self.audio.positionChanged.disconnect()
+            self.audio.durationChanged.disconnect()
         except:
             pass  # Ignore if signals are already disconnected
         
@@ -389,29 +453,60 @@ class PlayBar(QWidget):
                 self.setGeometry(parent.geometry())
         super().resizeEvent(event)
 
-    def play_track(self, track_url):
-        """Play a track by its audio source URL"""
-        if self.current_track_id == track_url and self.audio:
+    def play_track(self, video_id):
+        """Play a track by its YouTube video ID"""
+        if self.current_track_id == video_id and self.audio:
             if not self.is_playing:
                 self.toggle_play()
             return
+
+        # Show loading state
+        self.track_label.setText("Loading...")
+        self.thumbnail_label.clear()
 
         # Stop and clean up existing audio
         if self.audio:
             self.audio.stop()
             self.audio.setSource(QUrl())
             self.time_update_timer.stop()
-            self.animation_timer.stop()
+            self.seek_bar.setValue(0)
+            self.time_label.setText("0:00 / 0:00")
 
-        self.current_track_id = track_url
+        self.current_track_id = video_id
+
+        # Start thread to load audio info and thumbnail
+        self.loader_thread = AudioLoaderThread(video_id)
+        self.loader_thread.data_loaded.connect(self.on_audio_data_loaded)
+        self.loader_thread.error_occurred.connect(self.on_audio_load_error)
+        self.loader_thread.start()
+
+    def on_audio_data_loaded(self, data):
+        """Handle loaded audio data from thread"""
         try:
-            self.audio.setSource(QUrl(track_url))
+            # Update track information
+            self.update_track_info(data["track_name"], data["artist_name"], "0:00")
+
+            # Load and set thumbnail
+            pixmap = QPixmap()
+            pixmap.loadFromData(data["thumbnail_data"])
+            thumbnail_size = 100 if self.is_maximized else 60
+            self.thumbnail_label.setPixmap(pixmap.scaled(thumbnail_size, thumbnail_size, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+
+            # Set and play the audio
+            self.audio.setSource(QUrl(data["audio_url"]))
             self.audio.play()
             self.is_playing = True
             self.play_button.setIcon(QIcon("assets/svgs/pause.svg"))
             self.time_update_timer.start(1000)
-            if self.is_maximized:
-                self.animation_timer.start(33)  # Start background animation
+            if not self.is_maximized:
+                self.animation_timer.start(33)  # Start background animation only if not maximized
         except Exception as e:
             self.track_label.setText("Error loading track")
             self.audio.setSource(QUrl())
+            self.thumbnail_label.clear()
+
+    def on_audio_load_error(self, error):
+        """Handle errors from audio loading thread"""
+        self.track_label.setText("Error loading track")
+        self.audio.setSource(QUrl())
+        self.thumbnail_label.clear()

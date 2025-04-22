@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (
     QApplication, QWidget, QPushButton, QLabel, QVBoxLayout,
-    QHBoxLayout, QStackedWidget, QScrollArea,QSizePolicy,
+    QHBoxLayout, QStackedWidget, QScrollArea,QSizePolicy,QLineEdit
 )
 import sys
 from PySide6.QtCore import Qt, QSize, QFile, QTextStream,QUrl
@@ -8,7 +8,7 @@ from PySide6.QtGui import QIcon
 from PySide6.QtGui import QFontDatabase, QFont,QColor
 from components.gradient_label import GradientLabel
 from PySide6.QtGui import QImage,QPixmap,QPainter,QPainterPath,QTransform
-from components.playlist import get_pakistan_related_tracks,get_new_songs
+from components.playlist import search_youtube
 from io import BytesIO
 from components.clickableimage import ClickableImage
 from components.playbar import PlayBar
@@ -214,14 +214,14 @@ class MainWindow(QWidget):
             self.playbar.play_track(track_url)  # Pass the track URL to play
 
         try:
-            tracks = get_pakistan_related_tracks()
+            tracks = search_youtube("Coke Studio",25)
             track_info = []
-            for track in tracks["results"]:
-                track_name = track['name']
-                track_artists = track["artist_name"]
-                track_image_url = track["album_image"]
-                href = track['id']
-                url=track['audio']
+            for track in tracks:
+                track_name = track['title'][:30]
+                track_artists = track["name"][:30]
+                track_image_url = track["thumbnail"]
+                href = track['video_id']
+                url=track['video_id']
                 track_info.append({
                     "name": track_name,
                     "artists": track_artists,
@@ -481,23 +481,22 @@ class MainWindow(QWidget):
         self.weekly_more.addLayout(self.song_layout)
 
 
-
         # New releases
         below_new_label = QLabel()
-        below_new_label.setText('<span>New Release</span> <span style="color: #EE10B0;">Songs</span>')
+        below_new_label.setText('<span>Mood</span> <span style="color: #EE10B0;">Songs</span>')
         below_new_label.setObjectName("below-label")
         home.addWidget(below_new_label)
         self.main_track_layout = QHBoxLayout()
         self.main_track_layout.setContentsMargins(10, 10, 10, 10)
         try:
-            tracks = get_new_songs()
+            tracks = search_youtube("Sad Songs ", 20)
             track_info = []
-            for track in tracks["results"]:
-                track_name = track['name']
-                track_artists = track["artist_name"]
-                track_image_url = track["album_image"]
-                href = track['id']
-                url=track['audio']
+            for track in tracks:
+                track_name = track['title'][:30]
+                track_artists = track["name"][:30]
+                track_image_url = track["thumbnail"]
+                href = track['video_id']
+                url=track['video_id']
                 track_info.append({
                     "name": track_name,
                     "artists": track_artists,
@@ -567,7 +566,7 @@ class MainWindow(QWidget):
 
         # New releases
         below_label = QLabel()
-        below_label.setText('<span>New Release</span> <span style="color: #EE10B0;">Songs</span>')
+        below_label.setText('<span>Mood</span> <span style="color: #EE10B0;">Songs</span>')
         below_label.setObjectName("below-label")
         self.weekly_new.addWidget(below_label)
 
@@ -769,22 +768,78 @@ class MainWindow(QWidget):
         newly_scroll_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         newly_scroll_area.setStyleSheet("QScrollArea { border: none; }")        
         self.pages.addWidget(newly_scroll_area)
+       
+        def searchfunc():
+            print(inputfield.text())
+          # Search page
+        search = QVBoxLayout()
+        search.setSpacing(20)
+        search.setAlignment(Qt.AlignTop)
+        search.setContentsMargins(20, 20, 20, 0)
+        top_layout=QHBoxLayout()
+        inputfield=QLineEdit()
+        inputfield.setPlaceholderText("Search Music 🔎")
+        inputfield.setStyleSheet("""
+            QLineEdit {
+                background-color: white;
+                border-radius: 8px;
+                padding: 10px 4px;
+                font-size: 15px;
+                color:black
+            }
+            QLineEdit:focus {
+                background-color: #ffffff; 
+            }
+        """)
+        top_layout.addWidget(inputfield)
+        Search_button=QPushButton("Search")
+        Search_button.setIcon(QIcon("assets/svgs/search.svg"))
+        Search_button.setIconSize(QSize(20, 20))    
+        Search_button.setObjectName("search-button")
+        Search_button.setCursor(Qt.PointingHandCursor)  
+        Search_button.clicked.connect(searchfunc)
+        # Search_button.s 
+        top_layout.addWidget(Search_button)
 
-        self.search_page = QLabel("Search Music 🔍")
+
+        search.addLayout(top_layout)
+        # search_content=""
+        # search_layout=QVBoxLayout()
+        # search_layout.setContentsMargins(0, 0, 0, 0)
+        
+
+        searchpage_widget = QWidget()
+        searchpage_widget.setLayout(search)
+        searchpage_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+
+        search_scroll_area = QScrollArea()
+        search_scroll_area.setWidget(searchpage_widget)
+        search_scroll_area.setWidgetResizable(True)
+        search_scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        search_scroll_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        search_scroll_area.setStyleSheet("QScrollArea { border: none; }")
+
+        self.pages.addWidget(search_scroll_area)
+
+
+
+
+
         self.recognize_page = QLabel("Your recognized music 🎵")
         self.artist_page = QLabel("Artist 🎤")
         self.added_page = QLabel("Recently Played 🎵")
         self.played_page = QLabel("Most Played 🎵")
         self.log_page = QLabel("Logout 🎵")
         self.about_page = QLabel("About Us")
-        for page in [self.search_page, self.recognize_page, self.artist_page, self.added_page, self.played_page, self.log_page, self.about_page]:
+        for page in [self.recognize_page, self.artist_page, self.added_page, self.played_page, self.log_page, self.about_page]:
             page.setObjectName("pageLabel")
             page.setAlignment(Qt.AlignCenter)
             self.pages.addWidget(page)
         
         # Connect buttons to pages
         self.home_button.clicked.connect(lambda: self.activate_tab(self.home_button, home_scroll_area))
-        self.search_button.clicked.connect(lambda: self.activate_tab(self.search_button, self.search_page))
+        self.search_button.clicked.connect(lambda: self.activate_tab(self.search_button, search_scroll_area))
         self.recognize.clicked.connect(lambda: self.activate_tab(self.recognize, self.recognize_page))
         self.artist.clicked.connect(lambda: self.activate_tab(self.artist, self.artist_page))
         self.added.clicked.connect(lambda: self.activate_tab(self.added, self.added_page))
@@ -817,7 +872,7 @@ class MainWindow(QWidget):
         if file.open(QFile.ReadOnly | QFile.Text):
             stylesheet = QTextStream(file).readAll()
             self.setStyleSheet(stylesheet)
-    
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

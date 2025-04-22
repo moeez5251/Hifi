@@ -1,7 +1,6 @@
 import requests
 import yt_dlp
-CLIENT_ID = "8b958168"
-
+youtube_api_key="AIzaSyDMNhU8ZpkIOV1wAuPo6dc7yarfLnqEC0A1"
 # def get_access_token():
 #         url = "https://accounts.spotify.com/api/token"
 #         headers = {
@@ -17,61 +16,46 @@ CLIENT_ID = "8b958168"
 #             return None
 
 
-# Function to get playlist tracks
-def get_pakistan_related_tracks():
-    client_id = "8b958168"  # Replace with your actual client_id
-    url = f"https://api.jamendo.com/v3.0/tracks"
-    params = {
-        "client_id": client_id,
-        "format": "json",
-        "tags": "love",
-        "order": "popularity_total",
-        "limit": 22
-    }
-    response = requests.get(url, params=params)
-    
-    return response.json()
-def get_new_songs():
-    client_id = "8b958168"  # Replace with your actual client_id
-    url = f"https://api.jamendo.com/v3.0/tracks"
-    params = {
-        "client_id": client_id,
-        "format": "json",
-        "tags": "sad",
-        "order": "popularity_total",
-        "limit": 22
-    }
-    response = requests.get(url, params=params)
-    
-    return response.json()
-def get_audio_info(query):
+def get_audio_info_by_id(video_id):
+    url = f"https://www.youtube.com/watch?v={video_id}"
     ydl_opts = {
         'format': 'bestaudio/best',
         'quiet': True,
         'noplaylist': True,
-        'default_search': 'ytsearch1',
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(query, download=False)
-        if 'entries' in info:
-            info = info['entries'][0]
-
+        info = ydl.extract_info(url, download=False)
         result = {
             "title": info.get("title"),
             "artist": info.get("uploader"),
             "thumbnail": info.get("thumbnail"),
             "audio_url": info.get("url"),
             "video_url": info.get("webpage_url"),
-            "duration": info.get("duration"),
         }
-
         return result
 
-# Example usage
-track = get_audio_info("Jhol Coke Studio")
-print("🎵 Title:", track["title"])
-print("🧑‍🎤 Artist:", track["artist"])
-print("🖼️ Thumbnail:", track["thumbnail"])
-print("🔗 Audio URL:", track["audio_url"])
-print("📺 Video URL:", track["video_url"])
+def search_youtube(query, max_results=5):
+    search_url = "https://www.googleapis.com/youtube/v3/search"
+
+    params = {
+        "part": "snippet",
+        "q": query,
+        "type": "video",
+        "maxResults": max_results,
+        "key": youtube_api_key,
+    }
+
+    response = requests.get(search_url, params=params)
+    data = response.json()
+    results = []
+    for item in data.get("items", []):
+        snippet = item["snippet"]
+        results.append({
+            "name": snippet["channelTitle"],
+            "title": snippet["title"],
+            "thumbnail": snippet["thumbnails"]["high"]["url"],
+            "video_id": item["id"]["videoId"],
+        })
+
+    return results
