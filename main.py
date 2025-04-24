@@ -1,20 +1,45 @@
 from PySide6.QtWidgets import (
     QApplication, QWidget, QPushButton, QLabel, QVBoxLayout,
-    QHBoxLayout, QStackedWidget, QScrollArea,QSizePolicy,QLineEdit
+    QHBoxLayout, QStackedWidget, QScrollArea, QSizePolicy, QLineEdit
 )
 import sys
-from PySide6.QtCore import Qt, QSize, QFile, QTextStream,QUrl
-from PySide6.QtGui import QIcon
-from PySide6.QtGui import QFontDatabase, QFont,QColor
+from PySide6.QtCore import Qt, QSize, QFile, QTextStream, QThread, Signal, QEvent
+from PySide6.QtGui import QIcon, QFontDatabase, QFont, QColor, QImage, QPixmap, QPainter, QPainterPath, QTransform
 from components.gradient_label import GradientLabel
-from PySide6.QtGui import QImage,QPixmap,QPainter,QPainterPath,QTransform
 from components.playlist import search_youtube
 from io import BytesIO
 from components.clickableimage import ClickableImage
 from components.playbar import PlayBar
 import requests
-CLIENT_ID = "5c2fcd03261d47199284a7219dfc6fea"
-CLIENT_SECRET = "58c0438e935348d78aa4facfc8ea8e48"
+
+# Thread for fetching search results
+class SearchWorker(QThread):
+    results_fetched = Signal(list)
+    error_occurred = Signal(str)
+
+    def __init__(self, query, max_results):
+        super().__init__()
+        self.query = query
+        self.max_results = max_results
+
+    def run(self):
+        try:
+            tracks = search_youtube(self.query, self.max_results)
+            track_info = []
+            for track in tracks:
+                track_name = track['title'][:30]
+                track_artists = track["name"][:30]
+                track_image_url = track["thumbnail"]
+                url = track['video_id']
+                track_info.append({
+                    "name": track_name,
+                    "artists": track_artists,
+                    "album_image": track_image_url,
+                    "url": url
+                })
+            self.results_fetched.emit(track_info)
+        except Exception as e:
+            self.error_occurred.emit(str(e))
 
 class MainWindow(QWidget):
     def __init__(self):
@@ -199,7 +224,6 @@ class MainWindow(QWidget):
         # Store playbar instance
         self.playbar = None
         def on_image_click(track_url, track_name, artist_name):
-            
             if self.playbar is not None:
                 try:
                     self.playbar.close_player()  # Call close_player to hide and delete
@@ -214,20 +238,20 @@ class MainWindow(QWidget):
             self.playbar.play_track(track_url)  # Pass the track URL to play
 
         try:
-            tracks = search_youtube("Coke Studio",25)
+            tracks = search_youtube("Coke Studio", 25)
             track_info = []
             for track in tracks:
                 track_name = track['title'][:30]
                 track_artists = track["name"][:30]
                 track_image_url = track["thumbnail"]
                 href = track['video_id']
-                url=track['video_id']
+                url = track['video_id']
                 track_info.append({
                     "name": track_name,
                     "artists": track_artists,
                     "album_image": track_image_url,
-                    "href":href,
-                    "url":url
+                    "href": href,
+                    "url": url
                 })
             for tr in track_info[2:7]:
                 main_child_layout = QVBoxLayout()
@@ -295,8 +319,6 @@ class MainWindow(QWidget):
 
         self.pages.addWidget(home_scroll_area)
         
-
-
         # Weekly More
         self.weekly_more = QVBoxLayout()
         self.weekly_more.setSpacing(20)
@@ -310,176 +332,175 @@ class MainWindow(QWidget):
         self.song_layout = QHBoxLayout()
         self.song_layout.setContentsMargins(10, 10, 10, 10)
         for tr in track_info[0:5]:
-                main_child_layout = QVBoxLayout()
-                main_child_layout.setContentsMargins(0, 0, 0, 0)
-                main_child_layout.setAlignment(Qt.AlignCenter)
-                main_child_layout.setSpacing(10)
-                image = ClickableImage(track_id=tr["url"])
-                image_url = tr["album_image"]
-                response = requests.get(image_url)
-                response.raise_for_status()
-                image_data = BytesIO(response.content)
-                pixmap = QPixmap()
-                pixmap.loadFromData(image_data.read())
-                pixmap = pixmap.scaled(140, 150, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
+            main_child_layout = QVBoxLayout()
+            main_child_layout.setContentsMargins(0, 0, 0, 0)
+            main_child_layout.setAlignment(Qt.AlignCenter)
+            main_child_layout.setSpacing(10)
+            image = ClickableImage(track_id=tr["url"])
+            image_url = tr["album_image"]
+            response = requests.get(image_url)
+            response.raise_for_status()
+            image_data = BytesIO(response.content)
+            pixmap = QPixmap()
+            pixmap.loadFromData(image_data.read())
+            pixmap = pixmap.scaled(140, 150, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
 
-                rounded_pixmap = QPixmap(140, 150)
-                rounded_pixmap.fill(Qt.transparent)
-                painter = QPainter(rounded_pixmap)
-                path = QPainterPath()
-                path.addRoundedRect(0, 0, 140, 150, 10, 10)
-                painter.setClipPath(path)
-                painter.drawPixmap(0, 0, pixmap)
-                painter.end()
-                image.setPixmap(rounded_pixmap)
-                image.setCursor(Qt.PointingHandCursor)
-                image.setAlignment(Qt.AlignCenter)
-                image.setObjectName("image-weekly")
-                image.clicked.connect(lambda checked, turl=tr["url"], tname=tr["name"], tartist=tr["artists"]: on_image_click(turl, tname, tartist))
-                main_child_layout.addWidget(image)
-                label_name = QLabel(tr["name"])
-                label_name.setObjectName("label-name")
-                label_name.setAlignment(Qt.AlignCenter)
-                label_name.setWordWrap(True)
-                label_name.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-                main_child_layout.addWidget(label_name)
-                label_name = QLabel(tr["artists"])
-                label_name.setObjectName("artist-name")
-                label_name.setAlignment(Qt.AlignCenter)
-                main_child_layout.addWidget(label_name)
-                self.song_layout.addLayout(main_child_layout)
+            rounded_pixmap = QPixmap(140, 150)
+            rounded_pixmap.fill(Qt.transparent)
+            painter = QPainter(rounded_pixmap)
+            path = QPainterPath()
+            path.addRoundedRect(0, 0, 140, 150, 10, 10)
+            painter.setClipPath(path)
+            painter.drawPixmap(0, 0, pixmap)
+            painter.end()
+            image.setPixmap(rounded_pixmap)
+            image.setCursor(Qt.PointingHandCursor)
+            image.setAlignment(Qt.AlignCenter)
+            image.setObjectName("image-weekly")
+            image.clicked.connect(lambda checked, turl=tr["url"], tname=tr["name"], tartist=tr["artists"]: on_image_click(turl, tname, tartist))
+            main_child_layout.addWidget(image)
+            label_name = QLabel(tr["name"])
+            label_name.setObjectName("label-name")
+            label_name.setAlignment(Qt.AlignCenter)
+            label_name.setWordWrap(True)
+            label_name.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            main_child_layout.addWidget(label_name)
+            label_name = QLabel(tr["artists"])
+            label_name.setObjectName("artist-name")
+            label_name.setAlignment(Qt.AlignCenter)
+            main_child_layout.addWidget(label_name)
+            self.song_layout.addLayout(main_child_layout)
 
         self.weekly_more.addLayout(self.song_layout)
         self.song_layout = QHBoxLayout()
         self.song_layout.setContentsMargins(10, 10, 10, 10)
         for tr in track_info[6:11]:
-                main_child_layout = QVBoxLayout()
-                main_child_layout.setContentsMargins(0, 0, 0, 0)
-                main_child_layout.setAlignment(Qt.AlignCenter)
-                main_child_layout.setSpacing(10)
-                image = ClickableImage(track_id=tr["url"])
-                image_url = tr["album_image"]
-                response = requests.get(image_url)
-                response.raise_for_status()
-                image_data = BytesIO(response.content)
-                pixmap = QPixmap()
-                pixmap.loadFromData(image_data.read())
-                pixmap = pixmap.scaled(140, 150, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
+            main_child_layout = QVBoxLayout()
+            main_child_layout.setContentsMargins(0, 0, 0, 0)
+            main_child_layout.setAlignment(Qt.AlignCenter)
+            main_child_layout.setSpacing(10)
+            image = ClickableImage(track_id=tr["url"])
+            image_url = tr["album_image"]
+            response = requests.get(image_url)
+            response.raise_for_status()
+            image_data = BytesIO(response.content)
+            pixmap = QPixmap()
+            pixmap.loadFromData(image_data.read())
+            pixmap = pixmap.scaled(140, 150, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
 
-                rounded_pixmap = QPixmap(140, 150)
-                rounded_pixmap.fill(Qt.transparent)
-                painter = QPainter(rounded_pixmap)
-                path = QPainterPath()
-                path.addRoundedRect(0, 0, 140, 150, 10, 10)
-                painter.setClipPath(path)
-                painter.drawPixmap(0, 0, pixmap)
-                painter.end()
-                image.setPixmap(rounded_pixmap)
-                image.setCursor(Qt.PointingHandCursor)
-                image.setAlignment(Qt.AlignCenter)
-                image.setObjectName("image-weekly")
-                image.clicked.connect(lambda checked, turl=tr["url"], tname=tr["name"], tartist=tr["artists"]: on_image_click(turl, tname, tartist))
-                main_child_layout.addWidget(image)
-                label_name = QLabel(tr["name"])
-                label_name.setObjectName("label-name")
-                label_name.setAlignment(Qt.AlignCenter)
-                label_name.setWordWrap(True)
-                label_name.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-                main_child_layout.addWidget(label_name)
-                label_name = QLabel(tr["artists"])
-                label_name.setObjectName("artist-name")
-                label_name.setAlignment(Qt.AlignCenter)
-                main_child_layout.addWidget(label_name)
-                self.song_layout.addLayout(main_child_layout)
+            rounded_pixmap = QPixmap(140, 150)
+            rounded_pixmap.fill(Qt.transparent)
+            painter = QPainter(rounded_pixmap)
+            path = QPainterPath()
+            path.addRoundedRect(0, 0, 140, 150, 10, 10)
+            painter.setClipPath(path)
+            painter.drawPixmap(0, 0, pixmap)
+            painter.end()
+            image.setPixmap(rounded_pixmap)
+            image.setCursor(Qt.PointingHandCursor)
+            image.setAlignment(Qt.AlignCenter)
+            image.setObjectName("image-weekly")
+            image.clicked.connect(lambda checked, turl=tr["url"], tname=tr["name"], tartist=tr["artists"]: on_image_click(turl, tname, tartist))
+            main_child_layout.addWidget(image)
+            label_name = QLabel(tr["name"])
+            label_name.setObjectName("label-name")
+            label_name.setAlignment(Qt.AlignCenter)
+            label_name.setWordWrap(True)
+            label_name.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            main_child_layout.addWidget(label_name)
+            label_name = QLabel(tr["artists"])
+            label_name.setObjectName("artist-name")
+            label_name.setAlignment(Qt.AlignCenter)
+            main_child_layout.addWidget(label_name)
+            self.song_layout.addLayout(main_child_layout)
 
         self.weekly_more.addLayout(self.song_layout)
         self.song_layout = QHBoxLayout()
         self.song_layout.setContentsMargins(10, 10, 10, 10)
         for tr in track_info[11:16]:
-                main_child_layout = QVBoxLayout()
-                main_child_layout.setContentsMargins(0, 0, 0, 0)
-                main_child_layout.setAlignment(Qt.AlignCenter)
-                main_child_layout.setSpacing(10)
-                image = ClickableImage(track_id=tr["url"])
-                image_url = tr["album_image"]
-                response = requests.get(image_url)
-                response.raise_for_status()
-                image_data = BytesIO(response.content)
-                pixmap = QPixmap()
-                pixmap.loadFromData(image_data.read())
-                pixmap = pixmap.scaled(140, 150, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
+            main_child_layout = QVBoxLayout()
+            main_child_layout.setContentsMargins(0, 0, 0, 0)
+            main_child_layout.setAlignment(Qt.AlignCenter)
+            main_child_layout.setSpacing(10)
+            image = ClickableImage(track_id=tr["url"])
+            image_url = tr["album_image"]
+            response = requests.get(image_url)
+            response.raise_for_status()
+            image_data = BytesIO(response.content)
+            pixmap = QPixmap()
+            pixmap.loadFromData(image_data.read())
+            pixmap = pixmap.scaled(140, 150, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
 
-                rounded_pixmap = QPixmap(140, 150)
-                rounded_pixmap.fill(Qt.transparent)
-                painter = QPainter(rounded_pixmap)
-                path = QPainterPath()
-                path.addRoundedRect(0, 0, 140, 150, 10, 10)
-                painter.setClipPath(path)
-                painter.drawPixmap(0, 0, pixmap)
-                painter.end()
-                image.setPixmap(rounded_pixmap)
-                image.setCursor(Qt.PointingHandCursor)
-                image.setAlignment(Qt.AlignCenter)
-                image.setObjectName("image-weekly")
-                image.clicked.connect(lambda checked, turl=tr["url"], tname=tr["name"], tartist=tr["artists"]: on_image_click(turl, tname, tartist))
-                main_child_layout.addWidget(image)
-                label_name = QLabel(tr["name"])
-                label_name.setObjectName("label-name")
-                label_name.setAlignment(Qt.AlignCenter)
-                label_name.setWordWrap(True)
-                label_name.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-                main_child_layout.addWidget(label_name)
-                label_name = QLabel(tr["artists"])
-                label_name.setObjectName("artist-name")
-                label_name.setAlignment(Qt.AlignCenter)
-                main_child_layout.addWidget(label_name)
-                self.song_layout.addLayout(main_child_layout)
+            rounded_pixmap = QPixmap(140, 150)
+            rounded_pixmap.fill(Qt.transparent)
+            painter = QPainter(rounded_pixmap)
+            path = QPainterPath()
+            path.addRoundedRect(0, 0, 140, 150, 10, 10)
+            painter.setClipPath(path)
+            painter.drawPixmap(0, 0, pixmap)
+            painter.end()
+            image.setPixmap(rounded_pixmap)
+            image.setCursor(Qt.PointingHandCursor)
+            image.setAlignment(Qt.AlignCenter)
+            image.setObjectName("image-weekly")
+            image.clicked.connect(lambda checked, turl=tr["url"], tname=tr["name"], tartist=tr["artists"]: on_image_click(turl, tname, tartist))
+            main_child_layout.addWidget(image)
+            label_name = QLabel(tr["name"])
+            label_name.setObjectName("label-name")
+            label_name.setAlignment(Qt.AlignCenter)
+            label_name.setWordWrap(True)
+            label_name.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            main_child_layout.addWidget(label_name)
+            label_name = QLabel(tr["artists"])
+            label_name.setObjectName("artist-name")
+            label_name.setAlignment(Qt.AlignCenter)
+            main_child_layout.addWidget(label_name)
+            self.song_layout.addLayout(main_child_layout)
 
         self.weekly_more.addLayout(self.song_layout)
         self.song_layout = QHBoxLayout()
         self.song_layout.setContentsMargins(10, 10, 10, 10)
         for tr in track_info[16:21]:
-                main_child_layout = QVBoxLayout()
-                main_child_layout.setContentsMargins(0, 0, 0, 0)
-                main_child_layout.setAlignment(Qt.AlignCenter)
-                main_child_layout.setSpacing(10)
-                image = ClickableImage(track_id=tr["url"])
-                image_url = tr["album_image"]
-                response = requests.get(image_url)
-                response.raise_for_status()
-                image_data = BytesIO(response.content)
-                pixmap = QPixmap()
-                pixmap.loadFromData(image_data.read())
-                pixmap = pixmap.scaled(140, 150, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
+            main_child_layout = QVBoxLayout()
+            main_child_layout.setContentsMargins(0, 0, 0, 0)
+            main_child_layout.setAlignment(Qt.AlignCenter)
+            main_child_layout.setSpacing(10)
+            image = ClickableImage(track_id=tr["url"])
+            image_url = tr["album_image"]
+            response = requests.get(image_url)
+            response.raise_for_status()
+            image_data = BytesIO(response.content)
+            pixmap = QPixmap()
+            pixmap.loadFromData(image_data.read())
+            pixmap = pixmap.scaled(140, 150, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
 
-                rounded_pixmap = QPixmap(140, 150)
-                rounded_pixmap.fill(Qt.transparent)
-                painter = QPainter(rounded_pixmap)
-                path = QPainterPath()
-                path.addRoundedRect(0, 0, 140, 150, 10, 10)
-                painter.setClipPath(path)
-                painter.drawPixmap(0, 0, pixmap)
-                painter.end()
-                image.setPixmap(rounded_pixmap)
-                image.setCursor(Qt.PointingHandCursor)
-                image.setAlignment(Qt.AlignCenter)
-                image.setObjectName("image-weekly")
-                image.clicked.connect(lambda checked, turl=tr["url"], tname=tr["name"], tartist=tr["artists"]: on_image_click(turl, tname, tartist))
-                main_child_layout.addWidget(image)
-                label_name = QLabel(tr["name"])
-                label_name.setObjectName("label-name")
-                label_name.setAlignment(Qt.AlignCenter)
-                label_name.setWordWrap(True)
-                label_name.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-                main_child_layout.addWidget(label_name)
-                label_name = QLabel(tr["artists"])
-                label_name.setObjectName("artist-name")
-                label_name.setAlignment(Qt.AlignCenter)
-                main_child_layout.addWidget(label_name)
-                self.song_layout.addLayout(main_child_layout)
+            rounded_pixmap = QPixmap(140, 150)
+            rounded_pixmap.fill(Qt.transparent)
+            painter = QPainter(rounded_pixmap)
+            path = QPainterPath()
+            path.addRoundedRect(0, 0, 140, 150, 10, 10)
+            painter.setClipPath(path)
+            painter.drawPixmap(0, 0, pixmap)
+            painter.end()
+            image.setPixmap(rounded_pixmap)
+            image.setCursor(Qt.PointingHandCursor)
+            image.setAlignment(Qt.AlignCenter)
+            image.setObjectName("image-weekly")
+            image.clicked.connect(lambda checked, turl=tr["url"], tname=tr["name"], tartist=tr["artists"]: on_image_click(turl, tname, tartist))
+            main_child_layout.addWidget(image)
+            label_name = QLabel(tr["name"])
+            label_name.setObjectName("label-name")
+            label_name.setAlignment(Qt.AlignCenter)
+            label_name.setWordWrap(True)
+            label_name.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            main_child_layout.addWidget(label_name)
+            label_name = QLabel(tr["artists"])
+            label_name.setObjectName("artist-name")
+            label_name.setAlignment(Qt.AlignCenter)
+            main_child_layout.addWidget(label_name)
+            self.song_layout.addLayout(main_child_layout)
 
         self.weekly_more.addLayout(self.song_layout)
-
 
         # New releases
         below_new_label = QLabel()
@@ -496,13 +517,13 @@ class MainWindow(QWidget):
                 track_artists = track["name"][:30]
                 track_image_url = track["thumbnail"]
                 href = track['video_id']
-                url=track['video_id']
+                url = track['video_id']
                 track_info.append({
                     "name": track_name,
                     "artists": track_artists,
                     "album_image": track_image_url,
-                    "href":href,
-                    "url":url
+                    "href": href,
+                    "url": url
                 })
             for tr in track_info[2:7]:
                 main_child_layout = QVBoxLayout()
@@ -556,14 +577,12 @@ class MainWindow(QWidget):
             not_label.setAlignment(Qt.AlignCenter)
             self.main_track_layout.addWidget(not_label)
 
-
         home.addLayout(self.main_track_layout)
         self.weekly_new = QVBoxLayout()
         self.weekly_new.setSpacing(20)
         self.weekly_new.setAlignment(Qt.AlignTop)
         self.weekly_new.setContentsMargins(2, 0, 2, 0)
         
-
         # New releases
         below_label = QLabel()
         below_label.setText('<span>Mood</span> <span style="color: #EE10B0;">Songs</span>')
@@ -573,176 +592,175 @@ class MainWindow(QWidget):
         self.song_layout = QHBoxLayout()
         self.song_layout.setContentsMargins(10, 10, 10, 10)
         for tr in track_info[0:5]:
-                main_child_layout = QVBoxLayout()
-                main_child_layout.setContentsMargins(0, 0, 0, 0)
-                main_child_layout.setAlignment(Qt.AlignCenter)
-                main_child_layout.setSpacing(10)
-                image = ClickableImage(track_id=tr["url"])
-                image_url = tr["album_image"]
-                response = requests.get(image_url)
-                response.raise_for_status()
-                image_data = BytesIO(response.content)
-                pixmap = QPixmap()
-                pixmap.loadFromData(image_data.read())
-                pixmap = pixmap.scaled(140, 150, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
+            main_child_layout = QVBoxLayout()
+            main_child_layout.setContentsMargins(0, 0, 0, 0)
+            main_child_layout.setAlignment(Qt.AlignCenter)
+            main_child_layout.setSpacing(10)
+            image = ClickableImage(track_id=tr["url"])
+            image_url = tr["album_image"]
+            response = requests.get(image_url)
+            response.raise_for_status()
+            image_data = BytesIO(response.content)
+            pixmap = QPixmap()
+            pixmap.loadFromData(image_data.read())
+            pixmap = pixmap.scaled(140, 150, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
 
-                rounded_pixmap = QPixmap(140, 150)
-                rounded_pixmap.fill(Qt.transparent)
-                painter = QPainter(rounded_pixmap)
-                path = QPainterPath()
-                path.addRoundedRect(0, 0, 140, 150, 10, 10)
-                painter.setClipPath(path)
-                painter.drawPixmap(0, 0, pixmap)
-                painter.end()
-                image.setPixmap(rounded_pixmap)
-                image.setCursor(Qt.PointingHandCursor)
-                image.setAlignment(Qt.AlignCenter)
-                image.setObjectName("image-weekly")
-                image.clicked.connect(lambda checked, turl=tr["url"], tname=tr["name"], tartist=tr["artists"]: on_image_click(turl, tname, tartist))
-                main_child_layout.addWidget(image)
-                label_name = QLabel(tr["name"])
-                label_name.setObjectName("label-name")
-                label_name.setAlignment(Qt.AlignCenter)
-                label_name.setWordWrap(True)
-                label_name.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-                main_child_layout.addWidget(label_name)
-                label_name = QLabel(tr["artists"])
-                label_name.setObjectName("artist-name")
-                label_name.setAlignment(Qt.AlignCenter)
-                main_child_layout.addWidget(label_name)
-                self.song_layout.addLayout(main_child_layout)
+            rounded_pixmap = QPixmap(140, 150)
+            rounded_pixmap.fill(Qt.transparent)
+            painter = QPainter(rounded_pixmap)
+            path = QPainterPath()
+            path.addRoundedRect(0, 0, 140, 150, 10, 10)
+            painter.setClipPath(path)
+            painter.drawPixmap(0, 0, pixmap)
+            painter.end()
+            image.setPixmap(rounded_pixmap)
+            image.setCursor(Qt.PointingHandCursor)
+            image.setAlignment(Qt.AlignCenter)
+            image.setObjectName("image-weekly")
+            image.clicked.connect(lambda checked, turl=tr["url"], tname=tr["name"], tartist=tr["artists"]: on_image_click(turl, tname, tartist))
+            main_child_layout.addWidget(image)
+            label_name = QLabel(tr["name"])
+            label_name.setObjectName("label-name")
+            label_name.setAlignment(Qt.AlignCenter)
+            label_name.setWordWrap(True)
+            label_name.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            main_child_layout.addWidget(label_name)
+            label_name = QLabel(tr["artists"])
+            label_name.setObjectName("artist-name")
+            label_name.setAlignment(Qt.AlignCenter)
+            main_child_layout.addWidget(label_name)
+            self.song_layout.addLayout(main_child_layout)
 
         self.weekly_new.addLayout(self.song_layout)
         self.song_layout = QHBoxLayout()
         self.song_layout.setContentsMargins(10, 10, 10, 10)
         for tr in track_info[6:11]:
-                main_child_layout = QVBoxLayout()
-                main_child_layout.setContentsMargins(0, 0, 0, 0)
-                main_child_layout.setAlignment(Qt.AlignCenter)
-                main_child_layout.setSpacing(10)
-                image = ClickableImage(track_id=tr["url"])
-                image_url = tr["album_image"]
-                response = requests.get(image_url)
-                response.raise_for_status()
-                image_data = BytesIO(response.content)
-                pixmap = QPixmap()
-                pixmap.loadFromData(image_data.read())
-                pixmap = pixmap.scaled(140, 150, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
+            main_child_layout = QVBoxLayout()
+            main_child_layout.setContentsMargins(0, 0, 0, 0)
+            main_child_layout.setAlignment(Qt.AlignCenter)
+            main_child_layout.setSpacing(10)
+            image = ClickableImage(track_id=tr["url"])
+            image_url = tr["album_image"]
+            response = requests.get(image_url)
+            response.raise_for_status()
+            image_data = BytesIO(response.content)
+            pixmap = QPixmap()
+            pixmap.loadFromData(image_data.read())
+            pixmap = pixmap.scaled(140, 150, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
 
-                rounded_pixmap = QPixmap(140, 150)
-                rounded_pixmap.fill(Qt.transparent)
-                painter = QPainter(rounded_pixmap)
-                path = QPainterPath()
-                path.addRoundedRect(0, 0, 140, 150, 10, 10)
-                painter.setClipPath(path)
-                painter.drawPixmap(0, 0, pixmap)
-                painter.end()
-                image.setPixmap(rounded_pixmap)
-                image.setCursor(Qt.PointingHandCursor)
-                image.setAlignment(Qt.AlignCenter)
-                image.setObjectName("image-weekly")
-                image.clicked.connect(lambda checked, turl=tr["url"], tname=tr["name"], tartist=tr["artists"]: on_image_click(turl, tname, tartist))
-                main_child_layout.addWidget(image)
-                label_name = QLabel(tr["name"])
-                label_name.setObjectName("label-name")
-                label_name.setAlignment(Qt.AlignCenter)
-                label_name.setWordWrap(True)
-                label_name.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-                main_child_layout.addWidget(label_name)
-                label_name = QLabel(tr["artists"])
-                label_name.setObjectName("artist-name")
-                label_name.setAlignment(Qt.AlignCenter)
-                main_child_layout.addWidget(label_name)
-                self.song_layout.addLayout(main_child_layout)
+            rounded_pixmap = QPixmap(140, 150)
+            rounded_pixmap.fill(Qt.transparent)
+            painter = QPainter(rounded_pixmap)
+            path = QPainterPath()
+            path.addRoundedRect(0, 0, 140, 150, 10, 10)
+            painter.setClipPath(path)
+            painter.drawPixmap(0, 0, pixmap)
+            painter.end()
+            image.setPixmap(rounded_pixmap)
+            image.setCursor(Qt.PointingHandCursor)
+            image.setAlignment(Qt.AlignCenter)
+            image.setObjectName("image-weekly")
+            image.clicked.connect(lambda checked, turl=tr["url"], tname=tr["name"], tartist=tr["artists"]: on_image_click(turl, tname, tartist))
+            main_child_layout.addWidget(image)
+            label_name = QLabel(tr["name"])
+            label_name.setObjectName("label-name")
+            label_name.setAlignment(Qt.AlignCenter)
+            label_name.setWordWrap(True)
+            label_name.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            main_child_layout.addWidget(label_name)
+            label_name = QLabel(tr["artists"])
+            label_name.setObjectName("artist-name")
+            label_name.setAlignment(Qt.AlignCenter)
+            main_child_layout.addWidget(label_name)
+            self.song_layout.addLayout(main_child_layout)
 
         self.weekly_new.addLayout(self.song_layout)
         self.song_layout = QHBoxLayout()
         self.song_layout.setContentsMargins(10, 10, 10, 10)
         for tr in track_info[11:16]:
-                main_child_layout = QVBoxLayout()
-                main_child_layout.setContentsMargins(0, 0, 0, 0)
-                main_child_layout.setAlignment(Qt.AlignCenter)
-                main_child_layout.setSpacing(10)
-                image = ClickableImage(track_id=tr["url"])
-                image_url = tr["album_image"]
-                response = requests.get(image_url)
-                response.raise_for_status()
-                image_data = BytesIO(response.content)
-                pixmap = QPixmap()
-                pixmap.loadFromData(image_data.read())
-                pixmap = pixmap.scaled(140, 150, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
+            main_child_layout = QVBoxLayout()
+            main_child_layout.setContentsMargins(0, 0, 0, 0)
+            main_child_layout.setAlignment(Qt.AlignCenter)
+            main_child_layout.setSpacing(10)
+            image = ClickableImage(track_id=tr["url"])
+            image_url = tr["album_image"]
+            response = requests.get(image_url)
+            response.raise_for_status()
+            image_data = BytesIO(response.content)
+            pixmap = QPixmap()
+            pixmap.loadFromData(image_data.read())
+            pixmap = pixmap.scaled(140, 150, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
 
-                rounded_pixmap = QPixmap(140, 150)
-                rounded_pixmap.fill(Qt.transparent)
-                painter = QPainter(rounded_pixmap)
-                path = QPainterPath()
-                path.addRoundedRect(0, 0, 140, 150, 10, 10)
-                painter.setClipPath(path)
-                painter.drawPixmap(0, 0, pixmap)
-                painter.end()
-                image.setPixmap(rounded_pixmap)
-                image.setCursor(Qt.PointingHandCursor)
-                image.setAlignment(Qt.AlignCenter)
-                image.setObjectName("image-weekly")
-                image.clicked.connect(lambda checked, turl=tr["url"], tname=tr["name"], tartist=tr["artists"]: on_image_click(turl, tname, tartist))
-                main_child_layout.addWidget(image)
-                label_name = QLabel(tr["name"])
-                label_name.setObjectName("label-name")
-                label_name.setAlignment(Qt.AlignCenter)
-                label_name.setWordWrap(True)
-                label_name.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-                main_child_layout.addWidget(label_name)
-                label_name = QLabel(tr["artists"])
-                label_name.setObjectName("artist-name")
-                label_name.setAlignment(Qt.AlignCenter)
-                main_child_layout.addWidget(label_name)
-                self.song_layout.addLayout(main_child_layout)
+            rounded_pixmap = QPixmap(140, 150)
+            rounded_pixmap.fill(Qt.transparent)
+            painter = QPainter(rounded_pixmap)
+            path = QPainterPath()
+            path.addRoundedRect(0, 0, 140, 150, 10, 10)
+            painter.setClipPath(path)
+            painter.drawPixmap(0, 0, pixmap)
+            painter.end()
+            image.setPixmap(rounded_pixmap)
+            image.setCursor(Qt.PointingHandCursor)
+            image.setAlignment(Qt.AlignCenter)
+            image.setObjectName("image-weekly")
+            image.clicked.connect(lambda checked, turl=tr["url"], tname=tr["name"], tartist=tr["artists"]: on_image_click(turl, tname, tartist))
+            main_child_layout.addWidget(image)
+            label_name = QLabel(tr["name"])
+            label_name.setObjectName("label-name")
+            label_name.setAlignment(Qt.AlignCenter)
+            label_name.setWordWrap(True)
+            label_name.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            main_child_layout.addWidget(label_name)
+            label_name = QLabel(tr["artists"])
+            label_name.setObjectName("artist-name")
+            label_name.setAlignment(Qt.AlignCenter)
+            main_child_layout.addWidget(label_name)
+            self.song_layout.addLayout(main_child_layout)
 
         self.weekly_new.addLayout(self.song_layout)
         self.song_layout = QHBoxLayout()
         self.song_layout.setContentsMargins(10, 10, 10, 10)
         for tr in track_info[16:21]:
-                main_child_layout = QVBoxLayout()
-                main_child_layout.setContentsMargins(0, 0, 0, 0)
-                main_child_layout.setAlignment(Qt.AlignCenter)
-                main_child_layout.setSpacing(10)
-                image = ClickableImage(track_id=tr["url"])
-                image_url = tr["album_image"]
-                response = requests.get(image_url)
-                response.raise_for_status()
-                image_data = BytesIO(response.content)
-                pixmap = QPixmap()
-                pixmap.loadFromData(image_data.read())
-                pixmap = pixmap.scaled(140, 150, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
+            main_child_layout = QVBoxLayout()
+            main_child_layout.setContentsMargins(0, 0, 0, 0)
+            main_child_layout.setAlignment(Qt.AlignCenter)
+            main_child_layout.setSpacing(10)
+            image = ClickableImage(track_id=tr["url"])
+            image_url = tr["album_image"]
+            response = requests.get(image_url)
+            response.raise_for_status()
+            image_data = BytesIO(response.content)
+            pixmap = QPixmap()
+            pixmap.loadFromData(image_data.read())
+            pixmap = pixmap.scaled(140, 150, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
 
-                rounded_pixmap = QPixmap(140, 150)
-                rounded_pixmap.fill(Qt.transparent)
-                painter = QPainter(rounded_pixmap)
-                path = QPainterPath()
-                path.addRoundedRect(0, 0, 140, 150, 10, 10)
-                painter.setClipPath(path)
-                painter.drawPixmap(0, 0, pixmap)
-                painter.end()
-                image.setPixmap(rounded_pixmap)
-                image.setCursor(Qt.PointingHandCursor)
-                image.setAlignment(Qt.AlignCenter)
-                image.setObjectName("image-weekly")
-                image.clicked.connect(lambda checked, turl=tr["url"], tname=tr["name"], tartist=tr["artists"]: on_image_click(turl, tname, tartist))
-                main_child_layout.addWidget(image)
-                label_name = QLabel(tr["name"])
-                label_name.setObjectName("label-name")
-                label_name.setAlignment(Qt.AlignCenter)
-                label_name.setWordWrap(True)
-                label_name.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-                main_child_layout.addWidget(label_name)
-                label_name = QLabel(tr["artists"])
-                label_name.setObjectName("artist-name")
-                label_name.setAlignment(Qt.AlignCenter)
-                main_child_layout.addWidget(label_name)
-                self.song_layout.addLayout(main_child_layout)
+            rounded_pixmap = QPixmap(140, 150)
+            rounded_pixmap.fill(Qt.transparent)
+            painter = QPainter(rounded_pixmap)
+            path = QPainterPath()
+            path.addRoundedRect(0, 0, 140, 150, 10, 10)
+            painter.setClipPath(path)
+            painter.drawPixmap(0, 0, pixmap)
+            painter.end()
+            image.setPixmap(rounded_pixmap)
+            image.setCursor(Qt.PointingHandCursor)
+            image.setAlignment(Qt.AlignCenter)
+            image.setObjectName("image-weekly")
+            image.clicked.connect(lambda checked, turl=tr["url"], tname=tr["name"], tartist=tr["artists"]: on_image_click(turl, tname, tartist))
+            main_child_layout.addWidget(image)
+            label_name = QLabel(tr["name"])
+            label_name.setObjectName("label-name")
+            label_name.setAlignment(Qt.AlignCenter)
+            label_name.setWordWrap(True)
+            label_name.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            main_child_layout.addWidget(label_name)
+            label_name = QLabel(tr["artists"])
+            label_name.setObjectName("artist-name")
+            label_name.setAlignment(Qt.AlignCenter)
+            main_child_layout.addWidget(label_name)
+            self.song_layout.addLayout(main_child_layout)
 
         self.weekly_new.addLayout(self.song_layout)
-
 
         # Weekly More widget Page
         weekly_more_widget = QWidget()
@@ -769,38 +787,60 @@ class MainWindow(QWidget):
         newly_scroll_area.setStyleSheet("QScrollArea { border: none; }")        
         self.pages.addWidget(newly_scroll_area)
 
-       
-          # Search page
-      # Search page
+        # Search page
         search = QVBoxLayout()
         search.setSpacing(20)
         search.setAlignment(Qt.AlignTop)
-        search.setContentsMargins(20, 20, 20, 0)
+        search.setContentsMargins(20, 20, 20, 20)  # Adjusted margins for consistency
 
         # Top layout for input and button
         top_layout = QHBoxLayout()
-        inputfield = QLineEdit()
-        inputfield.setPlaceholderText("Search Music 🔎")
-        inputfield.setStyleSheet("""
+        top_layout.setContentsMargins(0, 0, 0, 0)
+        top_layout.setSpacing(10)
+        self.inputfield = QLineEdit()  # Store inputfield as instance variable
+        self.inputfield.setPlaceholderText("Search Music 🔎")
+        self.inputfield.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.inputfield.setMinimumHeight(40)
+        self.inputfield.setStyleSheet("""
             QLineEdit {
                 background-color: white;
                 border-radius: 8px;
-                padding: 10px 4px;
+                padding: 10px;
                 font-size: 15px;
                 color: black;
+                min-height: 40px;
+                max-height: 40px;
+                width: 100%;
+                margin-right: 10px;
             }
             QLineEdit:focus {
-                background-color: #ffffff; 
+                background-color: #ffffff;
+                border: 1px solid #EE10B0;
             }
         """)
-        top_layout.addWidget(inputfield)
+        top_layout.addWidget(self.inputfield, stretch=1)
 
         search_button = QPushButton("Search")
         search_button.setIcon(QIcon("assets/svgs/search.svg"))
         search_button.setIconSize(QSize(20, 20))
         search_button.setObjectName("search-button")
         search_button.setCursor(Qt.PointingHandCursor)
-        top_layout.addWidget(search_button)
+        search_button.setFixedWidth(100)
+        search_button.setMinimumHeight(40)
+        search_button.setStyleSheet("""
+            QPushButton#search-button {
+                background-color: #EE10B0;
+                color: white;
+                border-radius: 8px;
+                padding: 10px;
+                min-height: 40px;
+                max-height: 40px;
+            }
+            QPushButton#search-button:hover {
+                background-color: #d00f9a;
+            }
+        """)
+        top_layout.addWidget(search_button, stretch=0)
 
         search.addLayout(top_layout)
 
@@ -815,140 +855,34 @@ class MainWindow(QWidget):
         self.no_results_label.setAlignment(Qt.AlignCenter)
         self.search_layout.addWidget(self.no_results_label)
 
-        def update_search_ui(search_query):
-            # Clear previous content in search_layout
-            while self.search_layout.count():
-                item = self.search_layout.takeAt(0)
-                widget = item.widget()
-                if widget:
-                    widget.deleteLater()
+        # Initialize search worker
+        self.search_worker = None
 
-            if not search_query:
-                # Show "No results found" if query is empty
-                no_results_label = QLabel("No results found")
-                no_results_label.setObjectName("no-playlist")
-                no_results_label.setAlignment(Qt.AlignCenter)
-                self.search_layout.addWidget(no_results_label)
-                return
-
-            # Add header for search results
-            results_header = QLabel(f"Results for '{search_query}'")
-            results_header.setObjectName("below-label")
-            self.search_layout.addWidget(results_header)
-
-            try:
-                # Fetch search results from YouTube
-                tracks = search_youtube(search_query, 10)  # Limit to 10 results for performance
-                track_info = []
-                for track in tracks:
-                    track_name = track['title'][:30]
-                    track_artists = track["name"][:30]
-                    track_image_url = track["thumbnail"]
-                    url = track['video_id']
-                    track_info.append({
-                        "name": track_name,
-                        "artists": track_artists,
-                        "album_image": track_image_url,
-                        "url": url
-                    })
-
-                # Create a horizontal layout for each row (5 tracks per row)
-                row_layout = QHBoxLayout()
-                row_layout.setContentsMargins(10, 10, 10, 10)
-                row_layout.setSpacing(10)
-
-                for i, tr in enumerate(track_info):
-                    main_child_layout = QVBoxLayout()
-                    main_child_layout.setContentsMargins(0, 0, 0, 0)
-                    main_child_layout.setAlignment(Qt.AlignCenter)
-                    main_child_layout.setSpacing(10)
-
-                    # Create clickable image
-                    image = ClickableImage(track_id=tr["url"])
-                    image_url = tr["album_image"]
-                    response = requests.get(image_url)
-                    response.raise_for_status()
-                    image_data = BytesIO(response.content)
-                    pixmap = QPixmap()
-                    pixmap.loadFromData(image_data.read())
-                    pixmap = pixmap.scaled(140, 150, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
-
-                    rounded_pixmap = QPixmap(140, 150)
-                    rounded_pixmap.fill(Qt.transparent)
-                    painter = QPainter(rounded_pixmap)
-                    path = QPainterPath()
-                    path.addRoundedRect(0, 0, 140, 150, 10, 10)
-                    painter.setClipPath(path)
-                    painter.drawPixmap(0, 0, pixmap)
-                    painter.end()
-
-                    image.setPixmap(rounded_pixmap)
-                    image.setCursor(Qt.PointingHandCursor)
-                    image.setAlignment(Qt.AlignCenter)
-                    image.setObjectName("image-weekly")
-                    image.clicked.connect(
-                        lambda checked, turl=tr["url"], tname=tr["name"], tartist=tr["artists"]:
-                        on_image_click(turl, tname, tartist)
-                    )
-                    main_child_layout.addWidget(image)
-
-                    # Track name
-                    label_name = QLabel(tr["name"])
-                    label_name.setObjectName("label-name")
-                    label_name.setAlignment(Qt.AlignCenter)
-                    label_name.setWordWrap(True)
-                    label_name.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-                    main_child_layout.addWidget(label_name)
-
-                    # Artist name
-                    label_name = QLabel(tr["artists"])
-                    label_name.setObjectName("artist-name")
-                    label_name.setAlignment(Qt.AlignCenter)
-                    main_child_layout.addWidget(label_name)
-
-                    row_layout.addLayout(main_child_layout)
-
-                    # Start a new row after every 5 tracks
-                    if (i + 1) % 5 == 0 or i == len(track_info) - 1:
-                        self.search_layout.addLayout(row_layout)
-                        row_layout = QHBoxLayout()
-                        row_layout.setContentsMargins(10, 10, 10, 10)
-                        row_layout.setSpacing(10)
-
-                # Add stretch to push content up
-                self.search_layout.addStretch()
-
-            except Exception as e:
-                # Show error message if search fails
-                error_label = QLabel("Failed to fetch results")
-                error_label.setObjectName("no-playlist")
-                error_label.setAlignment(Qt.AlignCenter)
-                self.search_layout.addWidget(error_label)
-
-        def searchfunc():
-            search_query = inputfield.text().strip()
-            update_search_ui(search_query)
-
-        # Connect search button and input field
-        search_button.clicked.connect(searchfunc)
-        inputfield.returnPressed.connect(searchfunc)
+        # Connect search button
+        search_button.clicked.connect(self.perform_search)
 
         search.addLayout(self.search_layout)
         searchpage_widget = QWidget()
         searchpage_widget.setLayout(search)
         searchpage_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        searchpage_widget.setStyleSheet("QWidget { background: transparent; }")
 
         search_scroll_area = QScrollArea()
         search_scroll_area.setWidget(searchpage_widget)
         search_scroll_area.setWidgetResizable(True)
         search_scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         search_scroll_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        search_scroll_area.setStyleSheet("QScrollArea { border: none; }")
+        search_scroll_area.setStyleSheet("""
+            QScrollArea {
+                border: none;
+                background: transparent;
+            }
+            QScrollArea > QWidget > QWidget {
+                background: transparent;
+            }
+        """)
 
         self.pages.addWidget(search_scroll_area)
-
-
-
 
         self.recognize_page = QLabel("Your recognized music 🎵")
         self.artist_page = QLabel("Artist 🎤")
@@ -970,7 +904,7 @@ class MainWindow(QWidget):
         self.played.clicked.connect(lambda: self.activate_tab(self.played, self.played_page))
         self.log.clicked.connect(lambda: self.activate_tab(self.log, self.log_page))
         self.aboutbtn.clicked.connect(lambda: self.activate_tab(self.aboutbtn, self.about_page))
-        button.clicked.connect(lambda: self.activate_tab(self.search_button, self.search_page))
+        button.clicked.connect(lambda: self.activate_tab(self.search_button, search_scroll_area))
         button_view.clicked.connect(lambda: self.activate_tab(self.home_button, weekly_scroll_area))
         button_new_songs.clicked.connect(lambda: self.activate_tab(self.home_button, newly_scroll_area))
         # Add to content layout
@@ -979,6 +913,153 @@ class MainWindow(QWidget):
         
         # Add content layout to main layout
         main_layout.addLayout(content_layout)
+
+    def perform_search(self):
+        # Check if a previous search worker exists and is running
+        if self.search_worker is not None and self.search_worker.isRunning():
+            self.search_worker.quit()
+            self.search_worker.wait()
+
+        search_query = self.inputfield.text().strip()
+        if not search_query:
+            # Clear layout and add new "No results found" label
+            while self.search_layout.count():
+                item = self.search_layout.takeAt(0)
+                widget = item.widget()
+                if widget:
+                    widget.deleteLater()
+            no_results_label = QLabel("No results found")
+            no_results_label.setObjectName("no-playlist")
+            no_results_label.setAlignment(Qt.AlignCenter)
+            self.search_layout.addWidget(no_results_label)
+            return
+
+        # Start new search worker
+        self.search_worker = SearchWorker(search_query, 5)  # Limit to 5 results
+        self.search_worker.results_fetched.connect(self.update_search_ui)
+        self.search_worker.error_occurred.connect(self.show_search_error)
+        self.search_worker.finished.connect(self.on_search_worker_finished)
+        self.search_worker.start()
+
+    def on_search_worker_finished(self):
+        # Clear the search worker reference when it finishes
+        self.search_worker = None
+
+    def update_search_ui(self, track_info):
+        # Helper function to recursively clear a layout
+        def clear_layout(layout):
+            while layout.count():
+                item = layout.takeAt(0)
+                widget = item.widget()
+                if widget:
+                    widget.deleteLater()
+                child_layout = item.layout()
+                if child_layout:
+                    clear_layout(child_layout)
+                    child_layout.deleteLater()
+
+        # Clear all previous content in search_layout
+        clear_layout(self.search_layout)
+
+        if not track_info:
+            no_results_label = QLabel("No results found")
+            no_results_label.setObjectName("no-playlist")
+            no_results_label.setAlignment(Qt.AlignCenter)
+            self.search_layout.addWidget(no_results_label)
+            return
+
+        # Add header
+        results_header = QLabel(f"Results for '{self.inputfield.text().strip()}'")
+        results_header.setObjectName("below-label")
+        self.search_layout.addWidget(results_header)
+
+        # Create horizontal layout for tracks
+        row_layout = QHBoxLayout()
+        row_layout.setContentsMargins(10, 10, 10, 10)
+        row_layout.setSpacing(10)
+
+        for tr in track_info:
+            main_child_layout = QVBoxLayout()
+            main_child_layout.setContentsMargins(0, 0, 0, 0)
+            main_child_layout.setAlignment(Qt.AlignCenter)
+            main_child_layout.setSpacing(10)
+
+            # Create clickable image
+            image = ClickableImage(track_id=tr["url"])
+            try:
+                response = requests.get(tr["album_image"])
+                response.raise_for_status()
+                image_data = BytesIO(response.content)
+                pixmap = QPixmap()
+                pixmap.loadFromData(image_data.read())
+                pixmap = pixmap.scaled(140, 150, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
+
+                rounded_pixmap = QPixmap(140, 150)
+                rounded_pixmap.fill(Qt.transparent)
+                painter = QPainter(rounded_pixmap)
+                path = QPainterPath()
+                path.addRoundedRect(0, 0, 140, 150, 10, 10)
+                painter.setClipPath(path)
+                painter.drawPixmap(0, 0, pixmap)
+                painter.end()
+                image.setPixmap(rounded_pixmap)
+            except:
+                # Fallback to placeholder
+                placeholder_pixmap = QPixmap(140, 150)
+                placeholder_pixmap.fill(Qt.gray)
+                image.setPixmap(placeholder_pixmap)
+
+            image.setCursor(Qt.PointingHandCursor)
+            image.setAlignment(Qt.AlignCenter)
+            image.setObjectName("image-weekly")
+            image.clicked.connect(
+                lambda checked, turl=tr["url"], tname=tr["name"], tartist=tr["artists"]:
+                self.on_image_click(turl, tname, tartist)
+            )
+            main_child_layout.addWidget(image)
+
+            # Track name
+            label_name = QLabel(tr["name"])
+            label_name.setObjectName("label-name")
+            label_name.setAlignment(Qt.AlignCenter)
+            label_name.setWordWrap(True)
+            label_name.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            main_child_layout.addWidget(label_name)
+
+            # Artist name
+            label_name = QLabel(tr["artists"])
+            label_name.setObjectName("artist-name")
+            label_name.setAlignment(Qt.AlignCenter)
+            main_child_layout.addWidget(label_name)
+
+            row_layout.addLayout(main_child_layout)
+
+        self.search_layout.addLayout(row_layout)
+        self.search_layout.addStretch()
+
+    def show_search_error(self, error):
+        while self.search_layout.count():
+            item = self.search_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+        error_label = QLabel("Failed to fetch results")
+        error_label.setObjectName("no-playlist")
+        error_label.setAlignment(Qt.AlignCenter)
+        self.search_layout.addWidget(error_label)
+
+    def on_image_click(self, track_url, track_name, artist_name):
+        if self.playbar is not None:
+            try:
+                self.playbar.close_player()
+            except RuntimeError:
+                pass
+            self.playbar = None
+
+        self.playbar = PlayBar(self)
+        self.layout().addWidget(self.playbar)
+        self.playbar.update_track_info(track_name, artist_name, "3:45")
+        self.playbar.play_track(track_url)
 
     def set_active_button(self, button):
         for btn in [self.home_button, self.search_button, self.recognize, self.artist, self.added, self.played, self.log, self.aboutbtn]:
@@ -997,9 +1078,16 @@ class MainWindow(QWidget):
             stylesheet = QTextStream(file).readAll()
             self.setStyleSheet(stylesheet)
 
+    def closeEvent(self, event):
+        # Ensure search worker is finished before closing
+        if self.search_worker is not None and self.search_worker.isRunning():
+            self.search_worker.quit()
+            self.search_worker.wait()
+        self.search_worker = None
+        super().closeEvent(event)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
-    sys.exit(app.exec()) 
+    sys.exit(app.exec())
