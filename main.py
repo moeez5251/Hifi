@@ -798,7 +798,7 @@ class MainWindow(QWidget):
         top_layout.setContentsMargins(0, 0, 0, 0)
         top_layout.setSpacing(10)
         self.inputfield = QLineEdit()  # Store inputfield as instance variable
-        self.inputfield.setPlaceholderText("Search Music 🔎")
+        self.inputfield.setPlaceholderText("Search Music by 🎵🎶")
         self.inputfield.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.inputfield.setMinimumHeight(40)
         self.inputfield.setStyleSheet("""
@@ -850,7 +850,7 @@ class MainWindow(QWidget):
         self.search_layout.setSpacing(20)
 
         # Default "No results found" label
-        self.no_results_label = QLabel("No results found")
+        self.no_results_label = QLabel("Search for music  🎵🎶")
         self.no_results_label.setObjectName("no-playlist")
         self.no_results_label.setAlignment(Qt.AlignCenter)
         self.search_layout.addWidget(self.no_results_label)

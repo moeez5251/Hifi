@@ -45,3 +45,4 @@ def search_youtube(query, max_results=5):
         })
 
     return results
+    
