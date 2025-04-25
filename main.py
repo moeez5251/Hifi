@@ -54,7 +54,7 @@ class MainWindow(QWidget):
         self.setMinimumSize(1000, 1000)
         self.setWindowIcon(QIcon("assets/Logo.png"))    
         self.load_stylesheet("style.css")
-
+        
         # Main layout
         main_layout = QVBoxLayout(self)  # Use QVBoxLayout for playbar at bottom
         

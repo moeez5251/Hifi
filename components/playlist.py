@@ -1,20 +1,6 @@
 import requests
 import yt_dlp
 youtube_api_key="AIzaSyDMNhU8ZpkIOV1wAuPo6dc7yarfLnqEC0A"
-# def get_access_token():
-#         url = "https://accounts.spotify.com/api/token"
-#         headers = {
-#             "Content-Type": "application/x-www-form-urlencoded"
-#         }
-#         data = {
-#             "grant_type": "client_credentials"
-#         }
-#         response = requests.post(url, data=data, auth=(CLIENT_ID, CLIENT_SECRET), headers=headers)
-#         if response.status_code == 200:
-#             return response.json().get("access_token")
-#         else:
-#             return None
-
 
 def get_audio_info_by_id(video_id):
     url = f"https://www.youtube.com/watch?v={video_id}"
