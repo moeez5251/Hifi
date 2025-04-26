@@ -46,6 +46,7 @@ class PlayBar(QWidget):
         self.is_maximized = False
         self.is_playing = False
         self.normal_geometry = QRect(0, 0, self.width(), 80)
+        self.thumbnail_pixmap = None  # Store thumbnail for background
         
         # Audio setup
         self.audio = QMediaPlayer()
@@ -135,7 +136,7 @@ class PlayBar(QWidget):
         self.main_layout.addWidget(self.toggle_button)
 
         # Close button
-        self.close_button = QPushButton()
+        self.close_button = QPushButton()  # Fixed syntax error
         self.close_button.setObjectName("close-button")
         self.close_button.setIcon(QIcon("assets/svgs/close.svg"))
         self.close_button.setIconSize(QSize(24, 24))
@@ -154,67 +155,89 @@ class PlayBar(QWidget):
     def update_stylesheet(self, is_maximized):
         """Update stylesheet based on maximized state"""
         font_sizes = {
-            "track": 24 if is_maximized else 16,
-            "artist": 18 if is_maximized else 14,
-            "time": 16 if is_maximized else 14
+            "track": 28 if is_maximized else 16,
+            "artist": 20 if is_maximized else 14,
+            "time": 18 if is_maximized else 14
         }
-        thumbnail_size = 100 if is_maximized else 60  # Square thumbnail: 100x100 in maximized
-        background = """
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                stop:0 #87CEEB, stop:1 #00B7EB);
-        """ if is_maximized else """
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                stop:0 #1E1E2F, stop:0.5 #EE10B0, stop:1 #3B3B4F);
-        """
+        thumbnail_size = 100 if is_maximized else 60
+        if is_maximized and self.thumbnail_pixmap:
+            # Save thumbnail to a temporary file for stylesheet
+            temp_image_path = "temp_thumbnail.png"
+            self.thumbnail_pixmap.save(temp_image_path)
+            background = f"""
+                border-image: url({temp_image_path}) 0 0 0 0 stretch stretch;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(0, 0, 0, 150),
+                    stop:0.5 rgba(0, 0, 0, 100),
+                    stop:1 rgba(0, 0, 0, 150));
+                border: none;
+                border-radius: 10px;
+            """
+            self.thumbnail_label.hide()  # Hide thumbnail label in maximized mode
+        else:
+            background = """
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #1E1E2F, stop:0.5 #EE10B0, stop:1 #3B3B4F);
+                border: 1px solid #3B3B4F;
+            """
+            self.thumbnail_label.show()  # Show thumbnail label in normal mode
+
         self.setStyleSheet(f"""
             #playbar {{
                 {background}
-                border: {'' if is_maximized else '1px solid #3B3B4F'};
             }}
             #seek-bar {{
-                height: {10 if is_maximized else 8}px;
-                background: #3B3B4F;
-                border-radius: {5 if is_maximized else 4}px;
+                height: {12 if is_maximized else 8}px;
+                background: rgba(59, 59, 79, 180);
+                border-radius: {6 if is_maximized else 4}px;
                 margin: 0 10px;
             }}
             #seek-bar::groove:horizontal {{
-                background: #3B3B4F;
-                border-radius: {5 if is_maximized else 4}px;
+                background: rgba(59, 59, 79, 180);
+                border-radius: {6 if is_maximized else 4}px;
             }}
             #seek-bar::handle:horizontal {{
-                background: #EE10B0;
+                background: #00FFFF;
+                border: 1px solid #FFFFFF;
                 border-radius: {8 if is_maximized else 6}px;
-                width: {16 if is_maximized else 12}px;
-                height: {16 if is_maximized else 12}px;
+                width: {18 if is_maximized else 12}px;
+                height: {18 if is_maximized else 12}px;
                 margin: {-3 if is_maximized else -2}px 0;
             }}
             #seek-bar::sub-page:horizontal {{
                 background: #EE10B0;
-                border-radius: {5 if is_maximized else 4}px;
+                border-radius: {6 if is_maximized else 4}px;
             }}
             #play-button, #toggle-button, #close-button {{
-                background: transparent;
-                border: none;
+                background: rgba(59, 59, 79, {200 if is_maximized else 0});
+                border: {2 if is_maximized else 0}px solid #FFFFFF;
+                border-radius: 20px;
             }}
             #play-button:hover, #toggle-button:hover, #close-button:hover {{
-                background: #3B3B4F;
+                background: rgba(238, 16, 176, 200);
                 border-radius: 20px;
             }}
             #track-label {{
                 color: #FFFFFF;
                 font-weight: bold;
                 font-size: {font_sizes['track']}px;
-                background: transparent;
+                background: rgba(0, 0, 0, {150 if is_maximized else 0});
+                padding: {5 if is_maximized else 0}px;
+                border-radius: 5px;
             }}
             #artist-label {{
-                color: #FFFFFF;
+                color: #E0E0E0;
                 font-size: {font_sizes['artist']}px;
-                background: transparent;
+                background: rgba(0, 0, 0, {150 if is_maximized else 0});
+                padding: {5 if is_maximized else 0}px;
+                border-radius: 5px;
             }}
             #time-label {{
-                color: white;
+                color: #FFFFFF;
                 font-size: {font_sizes['time']}px;
-                background: transparent;
+                background: rgba(0, 0, 0, {150 if is_maximized else 0});
+                padding: {5 if is_maximized else 0}px;
+                border-radius: 5px;
             }}
             #thumbnail-label {{
                 border: none;
@@ -231,7 +254,7 @@ class PlayBar(QWidget):
             self.secondary_phase = 0.0
             self.animation_timer.stop()
         elif self.is_playing:
-            self.animation_timer.start(33)  # Update every 33ms for smoother animation (~30 FPS)
+            self.animation_timer.start(33)  # Update every 33ms (~30 FPS)
 
     def update_background_animation(self):
         """Update the background with a beat-like animation (only in non-maximized state)"""
@@ -463,6 +486,7 @@ class PlayBar(QWidget):
         # Show loading state
         self.track_label.setText("Loading...")
         self.thumbnail_label.clear()
+        self.thumbnail_pixmap = None  # Clear previous thumbnail
 
         # Stop and clean up existing audio
         if self.audio:
@@ -487,10 +511,13 @@ class PlayBar(QWidget):
             self.update_track_info(data["track_name"], data["artist_name"], "0:00")
 
             # Load and set thumbnail
-            pixmap = QPixmap()
-            pixmap.loadFromData(data["thumbnail_data"])
+            self.thumbnail_pixmap = QPixmap()
+            self.thumbnail_pixmap.loadFromData(data["thumbnail_data"])
             thumbnail_size = 100 if self.is_maximized else 60
-            self.thumbnail_label.setPixmap(pixmap.scaled(thumbnail_size, thumbnail_size, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            self.thumbnail_label.setPixmap(self.thumbnail_pixmap.scaled(thumbnail_size, thumbnail_size, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+
+            # Update stylesheet to reflect new thumbnail in maximized mode
+            self.update_stylesheet(self.is_maximized)
 
             # Set and play the audio
             self.audio.setSource(QUrl(data["audio_url"]))
@@ -504,9 +531,13 @@ class PlayBar(QWidget):
             self.track_label.setText("Error loading track")
             self.audio.setSource(QUrl())
             self.thumbnail_label.clear()
+            self.thumbnail_pixmap = None
+            self.update_stylesheet(self.is_maximized)
 
     def on_audio_load_error(self, error):
         """Handle errors from audio loading thread"""
         self.track_label.setText("Error loading track")
         self.audio.setSource(QUrl())
         self.thumbnail_label.clear()
+        self.thumbnail_pixmap = None
+        self.update_stylesheet(self.is_maximized)

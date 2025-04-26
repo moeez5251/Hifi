@@ -3,10 +3,11 @@ from PySide6.QtWidgets import (
     QHBoxLayout, QStackedWidget, QScrollArea, QSizePolicy, QLineEdit
 )
 import sys
-from PySide6.QtCore import Qt, QSize, QFile, QTextStream, QThread, Signal, QEvent
-from PySide6.QtGui import QIcon, QFontDatabase, QFont, QColor, QImage, QPixmap, QPainter, QPainterPath, QTransform
+from PySide6.QtCore import Qt, QSize, QFile, QTextStream, QThread, Signal, QEvent, QTimer, QPropertyAnimation
+from PySide6.QtGui import QIcon, QFontDatabase, QFont, QColor, QImage, QPixmap, QPainter, QPainterPath, QTransform, QPen
 from components.gradient_label import GradientLabel
 from components.playlist import search_youtube
+from components.recognizer import AudioRecognizer
 from io import BytesIO
 from components.clickableimage import ClickableImage
 from components.playbar import PlayBar
@@ -40,6 +41,115 @@ class SearchWorker(QThread):
             self.results_fetched.emit(track_info)
         except Exception as e:
             self.error_occurred.emit(str(e))
+
+# Thread for audio recognition
+class RecognitionWorker(QThread):
+    recognition_finished = Signal(dict)
+    error_occurred = Signal(str)
+
+    def __init__(self, duration):
+        super().__init__()
+        self.duration = duration
+        self.recognizer = None
+
+    def run(self):
+        try:
+            self.recognizer = AudioRecognizer(self.duration)
+            result = self.recognizer.process_audio()
+            self.recognition_finished.emit(result)
+        except Exception as e:
+            self.error_occurred.emit(str(e))
+
+    def cleanup(self):
+        if self.recognizer:
+            self.recognizer.clean_up()
+            self.recognizer = None
+
+# Animated Circle Widget
+class AnimatedCircle(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setMinimumSize(300, 300)
+        self.angle = 0
+        self.beat_amplitude = 0
+        self.is_recognizing = False
+        
+        # Animation for beat effect
+        self.beat_timer = QTimer(self)
+        self.beat_timer.timeout.connect(self.update_beat)
+        self.beat_timer.start(50)  # Update every 50ms
+        
+        # Animation for rotation
+        self.rotation_animation = QPropertyAnimation(self, b"rotation_angle")
+        self.rotation_animation.setDuration(10000)  # 10 seconds for one rotation
+        self.rotation_animation.setStartValue(0)
+        self.rotation_animation.setEndValue(360)
+        self.rotation_animation.setLoopCount(-1)  # Infinite loop
+        self.rotation_animation.start()
+
+    def set_rotation_angle(self, angle):
+        self.angle = angle
+        self.update()
+
+    def get_rotation_angle(self):
+        return self.angle
+
+    rotation_angle = property(get_rotation_angle, set_rotation_angle)
+
+    def update_beat(self):
+        if self.is_recognizing:
+            self.beat_amplitude = (self.beat_amplitude + 0.2) % 1
+        else:
+            self.beat_amplitude = max(0, self.beat_amplitude - 0.1)
+        self.update()
+
+    def start_recognition(self):
+        self.is_recognizing = True
+
+    def stop_recognition(self):
+        self.is_recognizing = False
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        
+        # Center and size calculations
+        center = self.rect().center()
+        radius = min(self.width(), self.height()) // 2 - 20
+        
+        # Draw background circle
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(40, 40, 40))
+        painter.drawEllipse(center, radius, radius)
+        
+        # Draw "HiFi" text
+        painter.setPen(Qt.white)
+        font = QFont("Poppins", 24, QFont.Bold)
+        painter.setFont(font)
+        painter.drawText(self.rect(), Qt.AlignCenter, "HiFi")
+        
+        # Draw animated beat bars
+        num_bars = 60
+        bar_width = 3
+        max_bar_height = 20
+        
+        painter.translate(center)
+        painter.rotate(self.angle)
+        
+        for i in range(num_bars):
+            # Calculate color gradient (blue to pink to orange)
+            hue = (i * 360 / num_bars) % 360
+            color = QColor.fromHsv(hue, 255, 255)
+            painter.setPen(QPen(color, bar_width))
+            
+            # Calculate bar height with beat animation
+            base_height = 5
+            beat_height = max_bar_height * self.beat_amplitude * (1 - abs((i % 15) - 7.5) / 7.5)
+            height = base_height + beat_height
+            
+            # Draw bar
+            painter.drawLine(0, radius, 0, radius + height)
+            painter.rotate(360 / num_bars)
 
 class MainWindow(QWidget):
     def __init__(self):
@@ -326,7 +436,7 @@ class MainWindow(QWidget):
         self.weekly_more.setContentsMargins(2, 0, 2, 0)
         
         below_label = QLabel()
-        below_label.setText('<span>Weekly Top</span> <span style="color: #EE10B0;">Songs</span>')
+        below_label.setText('<span endlessly>Weekly Top</span> <span style="color: #EE10B0;">Songs</span>')
         below_label.setObjectName("below-label")
         self.weekly_more.addWidget(below_label)
         self.song_layout = QHBoxLayout()
@@ -884,16 +994,55 @@ class MainWindow(QWidget):
 
         self.pages.addWidget(search_scroll_area)
 
-        self.recognize_page = QLabel("Your recognized music 🎵")
+        # Recognize page
+        recognize_layout = QVBoxLayout()
+        recognize_layout.setAlignment(Qt.AlignCenter)
+        recognize_layout.setSpacing(20)
+
+        # Heading
+        heading_label = GradientLabel("Song Recognizer", font_size=50)
+        heading_label.setObjectName("below-label")
+        heading_label.setAlignment(Qt.AlignCenter)
+        recognize_layout.addWidget(heading_label)
+
+        # Animated circle
+        self.recognize_circle = AnimatedCircle()
+        self.recognize_circle.setCursor(Qt.PointingHandCursor)
+        self.recognize_circle.mousePressEvent = self.start_recognition
+        recognize_layout.addWidget(self.recognize_circle)
+
+        # Status label
+        self.recognize_status = QLabel("Click the circle to recognize music 🎵")
+        self.recognize_status.setObjectName("below-label")
+        self.recognize_status.setAlignment(Qt.AlignCenter)
+        recognize_layout.addWidget(self.recognize_status)
+
+        # Results layout
+        self.recognize_results = QVBoxLayout()
+        self.recognize_results.setAlignment(Qt.AlignCenter)
+        self.recognize_results.setSpacing(10)
+        recognize_layout.addLayout(self.recognize_results)
+
+        recognize_widget = QWidget()
+        recognize_widget.setLayout(recognize_layout)
+        self.recognize_page = recognize_widget
+
+        # Other pages
         self.artist_page = QLabel("Artist 🎤")
         self.added_page = QLabel("Recently Played 🎵")
         self.played_page = QLabel("Most Played 🎵")
         self.log_page = QLabel("Logout 🎵")
         self.about_page = QLabel("About Us")
-        for page in [self.recognize_page, self.artist_page, self.added_page, self.played_page, self.log_page, self.about_page]:
+
+        # Set object name and alignment for QLabel pages
+        for page in [self.artist_page, self.added_page, self.played_page, self.log_page, self.about_page]:
             page.setObjectName("pageLabel")
             page.setAlignment(Qt.AlignCenter)
             self.pages.addWidget(page)
+
+        # Set object name for recognize_page (QWidget) and add to pages
+        self.recognize_page.setObjectName("pageLabel")
+        self.pages.addWidget(self.recognize_page)
         
         # Connect buttons to pages
         self.home_button.clicked.connect(lambda: self.activate_tab(self.home_button, home_scroll_area))
@@ -913,6 +1062,99 @@ class MainWindow(QWidget):
         
         # Add content layout to main layout
         main_layout.addLayout(content_layout)
+
+        # Initialize recognition worker as None
+        self.recognition_worker = None
+
+    def start_recognition(self, event):
+        # Stop any existing recognition worker
+        if self.recognition_worker is not None and self.recognition_worker.isRunning():
+            self.recognition_worker.quit()
+            self.recognition_worker.wait()
+            self.recognition_worker.cleanup()
+            self.recognition_worker = None
+
+        self.recognize_circle.start_recognition()
+        self.recognize_status.setText("Listening... 🎵")
+        
+        # Clear previous results
+        while self.recognize_results.count():
+            item = self.recognize_results.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+
+        # Start recognition worker
+        self.recognition_worker = RecognitionWorker(duration=5)
+        self.recognition_worker.recognition_finished.connect(self.on_recognition_finished)
+        self.recognition_worker.error_occurred.connect(self.on_recognition_error)
+        self.recognition_worker.finished.connect(self.on_recognition_worker_finished)
+        self.recognition_worker.start()
+
+    def on_recognition_worker_finished(self):
+        # Perform cleanup when the thread finishes
+        if self.recognition_worker:
+            self.recognition_worker.cleanup()
+        self.recognition_worker = None
+
+    def on_recognition_finished(self, result):
+        self.recognize_circle.stop_recognition()
+        
+        # Check if a song was found
+        if not result or 'song_title' not in result or not result['song_title']:
+            self.recognize_status.setText("Song not recognized 🎵")
+            not_found_label = QLabel("Song not found")
+            not_found_label.setObjectName("no-playlist")
+            not_found_label.setAlignment(Qt.AlignCenter)
+            self.recognize_results.addWidget(not_found_label)
+            return
+
+        self.recognize_status.setText("Song recognized! 🎵")
+
+        # Display results
+        song_label = QLabel(f"🎶 Song: {result['song_title']}")
+        artist_label = QLabel(f"👤 Artist: {result['artist_name']}")
+        album_label = QLabel(f"💿 Album: {result['album_name']}")
+        
+        for label in [song_label, artist_label, album_label]:
+            label.setObjectName("label-name")
+            label.setAlignment(Qt.AlignCenter)
+            self.recognize_results.addWidget(label)
+
+        # Search YouTube for the song and play
+        try:
+            tracks = search_youtube(result['song_title'], 1)
+            if tracks:
+                track = tracks[0]
+                track_url = track['video_id']
+                track_name = track['title'][:30]
+                track_artist = track['name'][:30]
+
+                if self.playbar is not None:
+                    try:
+                        self.playbar.close_player()
+                    except RuntimeError:
+                        pass
+                    self.playbar = None
+
+                self.playbar = PlayBar(self)
+                self.layout().addWidget(self.playbar)
+                self.playbar.update_track_info(track_name, track_artist, "3:45")
+                self.playbar.play_track(track_url)
+        except Exception as e:
+            error_label = QLabel("Failed to play song")
+            error_label.setObjectName("no-playlist")
+            error_label.setAlignment(Qt.AlignCenter)
+            self.recognize_results.addWidget(error_label)
+
+    def on_recognition_error(self, error):
+        self.recognize_circle.stop_recognition()
+        self.recognize_status.setText("No Song Found")
+        
+        error_label = QLabel("Failed to recognize song")
+        error_label.setObjectName("no-playlist")
+        error_label.setAlignment(Qt.AlignCenter)
+        self.recognize_results.addWidget(error_label)
 
     def perform_search(self):
         # Check if a previous search worker exists and is running
@@ -1084,6 +1326,14 @@ class MainWindow(QWidget):
             self.search_worker.quit()
             self.search_worker.wait()
         self.search_worker = None
+
+        # Ensure recognition worker is finished before closing
+        if self.recognition_worker is not None and self.recognition_worker.isRunning():
+            self.recognition_worker.quit()
+            self.recognition_worker.wait()
+            self.recognition_worker.cleanup()
+        self.recognition_worker = None
+
         super().closeEvent(event)
 
 if __name__ == "__main__":
