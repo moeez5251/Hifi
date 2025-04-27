@@ -160,3 +160,6 @@ QLabel#artist-name {
 QLabel#image-weekly {
     border-radius: 10px;
 }
+#label-name{
+    font-size: 25px;
+}

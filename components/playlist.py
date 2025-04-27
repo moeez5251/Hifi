@@ -1,7 +1,10 @@
 import requests
 import yt_dlp
-youtube_api_key="AIzaSyDMNhU8ZpkIOV1wAuPo6dc7yarfLnqEC0A"
-
+from dotenv import load_dotenv
+import os
+load_dotenv()
+youtube_api_key=os.getenv("YOUTUBE_API_KEY")
+print(youtube_api_key)
 def get_audio_info_by_id(video_id):
     url = f"https://www.youtube.com/watch?v={video_id}"
     ydl_opts = {
@@ -33,7 +36,9 @@ def search_youtube(query, max_results=5):
     }
 
     response = requests.get(search_url, params=params)
+
     data = response.json()
+    print(data)
     results = []
     for item in data.get("items", []):
         snippet = item["snippet"]

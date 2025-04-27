@@ -13,18 +13,12 @@ ACR_ACCESS_KEY = "acdd72326d7fd3c7c2a8638964513f47"
 ACR_ACCESS_SECRET = "cEGCBk3jR7fN6eoZux5qCFABoM2QEiPhIOm0lCP8"
 ACR_REQURL = "https://identify-ap-southeast-1.acrcloud.com/v1/identify"
 
-# === Spotify credentials ===
-SPOTIFY_CLIENT_ID = "5c2fcd03261d47199284a7219dfc6fea"
-SPOTIFY_CLIENT_SECRET = "58c0438e935348d78aa4facfc8ea8e48"
-
 class AudioRecognizer:
     def __init__(self, duration=5, sample_rate=44100):
         self.duration = duration
         self.sample_rate = sample_rate
         self.recorded_file = None
         self.result = None
-        self.spotify_token = None
-        self.spotify_track_info = None
 
     # === Record audio ===
     def record_audio(self):
@@ -76,47 +70,6 @@ class AudioRecognizer:
             response = requests.post(ACR_REQURL, files=files, data=data)
             response.encoding = "utf-8"
             self.result = response.json()
-    
-    # === Get Spotify Access Token ===
-    def get_spotify_access_token(self):
-        url = "https://accounts.spotify.com/api/token"
-        auth_string = f"{SPOTIFY_CLIENT_ID}:{SPOTIFY_CLIENT_SECRET}"
-        auth_base64 = base64.b64encode(auth_string.encode('utf-8')).decode('utf-8')
-
-        headers = {
-            "Authorization": f"Basic {auth_base64}",
-            "Content-Type": "application/x-www-form-urlencoded"
-        }
-        data = {
-            "grant_type": "client_credentials"
-        }
-
-        response = requests.post(url, headers=headers, data=data)
-        if response.status_code == 200:
-            self.spotify_token = response.json()['access_token']
-        else:
-            raise Exception(f"Failed to get Spotify token: {response.status_code} {response.text}")
-
-    # === Get Spotify Track Details ===
-    def get_spotify_track_info(self):
-        if not self.result:
-            raise Exception("No result from ACRCloud. Please recognize the audio first.")
-        
-        metadata = self.result['metadata']['music'][0]
-        spotify_track_id = metadata.get('external_metadata', {}).get('spotify', {}).get('track', {}).get('id')
-
-        if spotify_track_id:
-            url = f"https://api.spotify.com/v1/tracks/{spotify_track_id}"
-            headers = {
-                "Authorization": f"Bearer {self.spotify_token}"
-            }
-            response = requests.get(url, headers=headers)
-            if response.status_code == 200:
-                self.spotify_track_info = response.json()
-            else:
-                raise Exception(f"Failed to fetch track info: {response.status_code} {response.text}")
-        else:
-            raise Exception("No Spotify track ID found in ACRCloud response.")
 
     # === Main method to run everything ===
     def process_audio(self):
@@ -132,21 +85,9 @@ class AudioRecognizer:
             print(f"🎶 Song: {song_title}")
             print(f"👤 Artist: {artist_name}")
 
-            # Get Spotify token and track info
-            self.get_spotify_access_token()
-            self.get_spotify_track_info()
-
-            album_name = self.spotify_track_info['album']['name']
-            album_image = self.spotify_track_info['album']['images'][0]['url']  # Get biggest image
-
-            print(f"💿 Album: {album_name}")
-            print(f"🖼️ Album Image URL: {album_image}")
-
             return {
                 "song_title": song_title,
-                "artist_name": artist_name,
-                "album_name": album_name,
-                "album_image_url": album_image
+                "artist_name": artist_name
             }
         else:
             raise Exception(f"❌ Recognition failed: {self.result['status']['msg']}")
