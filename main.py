@@ -14,6 +14,18 @@ from components.playbar import PlayBar
 import requests
 import uuid
 import os
+from pathlib import Path
+import sys
+import os
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    if hasattr(sys, '_MEIPASS'):
+        return os.path.join(sys._MEIPASS, relative_path)
+    return os.path.join(os.path.abspath("."), relative_path)
+
+# Example usage:
+image = QImage(resource_path('assets/Banner.png'))
 
 # Thread for fetching search results
 class SearchWorker(QThread):
@@ -174,8 +186,8 @@ class MainWindow(QWidget):
 
         # Splash screen
         splash_pixmap = QPixmap()
-        if os.path.exists("assets/Logo.png"):
-            splash_pixmap = QPixmap("assets/Logo.png").scaled(300, 300, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        if os.path.exists(resource_path("assets/Logo.png")):
+            splash_pixmap = QPixmap(resource_path("assets/Logo.png")).scaled(300, 300, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         else:
             splash_pixmap = QPixmap(300, 300)
             splash_pixmap.fill(Qt.gray)
@@ -184,7 +196,7 @@ class MainWindow(QWidget):
         QApplication.processEvents()
 
         # Font setup
-        font_id = QFontDatabase.addApplicationFont("assets/fonts/Poppins-Regular.ttf")
+        font_id = QFontDatabase.addApplicationFont(resource_path("assets/fonts/Poppins-Regular.ttf"))
         if font_id != -1:
             font_family = QFontDatabase.applicationFontFamilies(font_id)[0]
             self.setFont(QFont(font_family, 14))
@@ -193,7 +205,7 @@ class MainWindow(QWidget):
 
         self.setWindowTitle("HiFi")
         self.setMinimumSize(1000, 1000)
-        self.setWindowIcon(QIcon("assets/Logo.png") if os.path.exists("assets/Logo.png") else QIcon())
+        self.setWindowIcon(QIcon(resource_path("assets/Logo.png")) if os.path.exists(resource_path("assets/Logo.png")) else QIcon())
         self.load_stylesheet("style.css")
 
         # Main layout
@@ -275,7 +287,7 @@ class MainWindow(QWidget):
         home.setContentsMargins(2, 0, 2, 0)
 
         background_label = QLabel()
-        image = QImage('assets/Banner.png') if os.path.exists('assets/Banner.png') else QImage(800, 400)
+        image = QImage('assets/Banner.png') if os.path.exists('assets/Banner.png') else QImage(800, 400,QImage.Format_RGB32)
         if not image.isNull():
             transform = QTransform().scale(-1, 1)
             mirrored_image = image.transformed(transform, Qt.SmoothTransformation)
@@ -682,9 +694,9 @@ class MainWindow(QWidget):
         team_layout.setSpacing(20)
         team_members = [
             ("Moeez Sheikh", "Developer", "assets/Moeez.png"),
-            ("Taha Ilyas", "UI/UX Designer", "assets/Taha.png"),
-            ("Haseeb Akram", "UI/UX Designer", "assets/Haseeb.png"),
-            ("Fasee Muzammil", "API Fetcher", "assets/Fasee.png")
+            ("Taha Ilyas", "Designer", "assets/Taha.png"),
+            ("Haseeb Akram", "Designer", "assets/Haseeb.png"),
+            ("Fasee Muzammil", "Developer", "assets/Fasee.png")
         ]
         for name, role, image_path in team_members:
             member_layout = QVBoxLayout()
@@ -1066,7 +1078,9 @@ class MainWindow(QWidget):
         # Load images asynchronously
         image_loader = ImageLoader(initial_tracks)
         self.image_loaders.append(image_loader)
-        image_loader.image_loaded.connect(lambda track, pixmap: self.update_track_image(self.weekly_more_layout,track, pixmap,track_info, rows=True))
+        image_loader.image_loaded.connect(
+            lambda track, pixmap: self.update_track_image(self.main_track_layout, track, pixmap, initial_tracks)
+        )
         image_loader.finished.connect(lambda: self.on_image_loader_finished(image_loader))
         image_loader.start()
         
@@ -1671,7 +1685,8 @@ class MainWindow(QWidget):
             search_func()
 
     def load_stylesheet(self, filename):
-        file = QFile(filename)
+        path = resource_path(filename) 
+        file = QFile(path)
         if file.open(QFile.ReadOnly | QFile.Text):
             self.setStyleSheet(QTextStream(file).readAll())
             file.close()
@@ -1714,4 +1729,3 @@ if __name__ == "__main__":
         sys.exit(app.exec())
     except Exception as e:
         print(f"Failed to start application: {e}")
-        sys.exit(1)

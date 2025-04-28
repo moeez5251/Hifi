@@ -1,2 +1,11 @@
-PySide6 
+PySide6
 requests
+python-dotenv
+yt-dlp
+numpy
+scipy
+acrcloud-sdk-python
+pyinstaller
+watchdog
+pillow
+QtMultimedia

@@ -7,11 +7,13 @@ import tempfile
 import requests
 import sounddevice as sd
 from scipy.io.wavfile import write
+from dotenv import load_dotenv
+load_dotenv()
 
 # === ACRCloud credentials ===
-ACR_ACCESS_KEY = "acdd72326d7fd3c7c2a8638964513f47"
-ACR_ACCESS_SECRET = "cEGCBk3jR7fN6eoZux5qCFABoM2QEiPhIOm0lCP8"
-ACR_REQURL = "https://identify-ap-southeast-1.acrcloud.com/v1/identify"
+ACR_ACCESS_KEY = os.getenv("ACR_ACCESS_KEY")
+ACR_ACCESS_SECRET = os.getenv("ACR_ACCESS_SECRET")
+ACR_REQURL = os.getenv("ACR_REQURL")
 
 class AudioRecognizer:
     def __init__(self, duration=5, sample_rate=44100):
