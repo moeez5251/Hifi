@@ -4,8 +4,5 @@ python-dotenv
 yt-dlp
 numpy
 scipy
-acrcloud-sdk-python
 pyinstaller
 watchdog
-pillow
-QtMultimedia

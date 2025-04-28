@@ -4,8 +4,13 @@ from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 import math
 import requests
+import os, sys
 from components.playlist import get_audio_info_by_id
-
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    if hasattr(sys, '_MEIPASS'):
+        return os.path.join(sys._MEIPASS, relative_path)
+    return os.path.join(os.path.abspath("."), relative_path)
 class AudioLoaderThread(QThread):
     """Thread to load audio info and thumbnail asynchronously"""
     data_loaded = Signal(dict)  # Signal to emit loaded data
@@ -84,7 +89,7 @@ class PlayBar(QWidget):
         # Play/Pause button
         self.play_button = QPushButton()
         self.play_button.setObjectName("play-button")
-        self.play_button.setIcon(QIcon("assets/svgs/play.svg"))
+        self.play_button.setIcon(QIcon(resource_path("assets/svgs/play.svg")))
         self.play_button.setIconSize(QSize(24, 24))
         self.play_button.setFixedSize(40, 40)
         self.play_button.setCursor(Qt.PointingHandCursor)
@@ -128,7 +133,7 @@ class PlayBar(QWidget):
         # Maximize/Minimize button
         self.toggle_button = QPushButton()
         self.toggle_button.setObjectName("toggle-button")
-        self.toggle_button.setIcon(QIcon("assets/svgs/maximize.svg"))
+        self.toggle_button.setIcon(QIcon(resource_path("assets/svgs/maximize.svg")))
         self.toggle_button.setIconSize(QSize(24, 24))
         self.toggle_button.setFixedSize(40, 40)
         self.toggle_button.setCursor(Qt.PointingHandCursor)
@@ -138,7 +143,7 @@ class PlayBar(QWidget):
         # Close button
         self.close_button = QPushButton()  # Fixed syntax error
         self.close_button.setObjectName("close-button")
-        self.close_button.setIcon(QIcon("assets/svgs/close.svg"))
+        self.close_button.setIcon(QIcon(resource_path("assets/svgs/close.svg")))
         self.close_button.setIconSize(QSize(24, 24))
         self.close_button.setFixedSize(40, 40)
         self.close_button.setCursor(Qt.PointingHandCursor)
@@ -392,7 +397,7 @@ class PlayBar(QWidget):
             
         self.is_playing = not self.is_playing
         icon = "assets/svgs/pause.svg" if self.is_playing else "assets/svgs/play.svg"
-        self.play_button.setIcon(QIcon(icon))
+        self.play_button.setIcon(QIcon(resource_path(icon)))
         
         if self.is_playing:
             self.audio.play()
@@ -440,7 +445,7 @@ class PlayBar(QWidget):
             self.update_stylesheet(False)
 
         icon = "assets/svgs/minimize.svg" if self.is_maximized else "assets/svgs/maximize.svg"
-        self.toggle_button.setIcon(QIcon(icon))
+        self.toggle_button.setIcon(QIcon(resource_path(icon)))
         self.animation.start()
 
     def close_player(self):
@@ -523,7 +528,7 @@ class PlayBar(QWidget):
             self.audio.setSource(QUrl(data["audio_url"]))
             self.audio.play()
             self.is_playing = True
-            self.play_button.setIcon(QIcon("assets/svgs/pause.svg"))
+            self.play_button.setIcon(QIcon(resource_path("assets/svgs/pause.svg")))
             self.time_update_timer.start(1000)
             if not self.is_maximized:
                 self.animation_timer.start(33)  # Start background animation only if not maximized

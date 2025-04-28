@@ -93,22 +93,33 @@ class ImageLoader(QThread):
                 response = requests.get(tr["album_image"], timeout=5)
                 response.raise_for_status()
                 image_data = BytesIO(response.content)
+                
                 pixmap = QPixmap()
-                pixmap.loadFromData(image_data.read())
-                pixmap = pixmap.scaled(140, 150, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
-                rounded_pixmap = QPixmap(140, 150)
-                rounded_pixmap.fill(Qt.transparent)
-                painter = QPainter(rounded_pixmap)
-                path = QPainterPath()
-                path.addRoundedRect(0, 0, 140, 150, 10, 10)
-                painter.setClipPath(path)
-                painter.drawPixmap(0, 0, pixmap)
-                painter.end()
-                self.image_loaded.emit(tr, rounded_pixmap)
-            except Exception:
+                if pixmap.loadFromData(image_data.getvalue()):  # Use getvalue() for reliable buffer access
+                    pixmap = pixmap.scaled(140, 150, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
+                    rounded_pixmap = QPixmap(140, 150)
+                    rounded_pixmap.fill(Qt.transparent)
+
+                    painter = QPainter(rounded_pixmap)
+                    path = QPainterPath()
+                    path.addRoundedRect(0, 0, 140, 150, 10, 10)
+                    painter.setClipPath(path)
+                    painter.drawPixmap(0, 0, pixmap)
+                    painter.end()
+
+                    self.image_loaded.emit(tr, rounded_pixmap)
+                else:
+                    print(f"ImageLoader: Failed to load image data for {tr['album_image']}")  # Debug
+                    placeholder_pixmap = QPixmap(140, 150)
+                    placeholder_pixmap.fill(Qt.gray)
+                    self.image_loaded.emit(tr, placeholder_pixmap)
+
+            except Exception as e:
+                print(f"ImageLoader: Error loading image {tr['album_image']}: {e}")  # Debug
                 placeholder_pixmap = QPixmap(140, 150)
                 placeholder_pixmap.fill(Qt.gray)
                 self.image_loaded.emit(tr, placeholder_pixmap)
+
 
 # Animated Circle Widget
 class AnimatedCircle(QWidget):
@@ -229,29 +240,29 @@ class MainWindow(QWidget):
         sidebar.addWidget(self.menu)
 
         self.home_button = QPushButton("Home")
-        self.home_button.setIcon(QIcon("assets/svgs/home.svg") if os.path.exists("assets/svgs/home.svg") else QIcon())
+        self.home_button.setIcon(QIcon(resource_path("assets/svgs/home.svg")) if os.path.exists(resource_path("assets/svgs/home.svg")) else QIcon())
         self.home_button.setIconSize(QSize(20, 20))
         self.home_button.setObjectName("active-btn")
         self.search_button = QPushButton("Discover")
-        self.search_button.setIcon(QIcon("assets/svgs/search.svg") if os.path.exists("assets/svgs/search.svg") else QIcon())
+        self.search_button.setIcon(QIcon(resource_path(resource_path("assets/svgs/search.svg"))) if os.path.exists(resource_path(resource_path("assets/svgs/search.svg"))) else QIcon())
         self.search_button.setIconSize(QSize(20, 20))
         self.recognize = QPushButton("Recognize")
-        self.recognize.setIcon(QIcon("assets/svgs/recognize.svg") if os.path.exists("assets/svgs/recognize.svg") else QIcon())
+        self.recognize.setIcon(QIcon(resource_path("assets/svgs/recognize.svg")) if os.path.exists(resource_path("assets/svgs/recognize.svg")) else QIcon())
         self.recognize.setIconSize(QSize(20, 20))
         self.artist = QPushButton("Artist")
-        self.artist.setIcon(QIcon("assets/svgs/Artist.svg") if os.path.exists("assets/svgs/Artist.svg") else QIcon())
+        self.artist.setIcon(QIcon(resource_path("assets/svgs/Artist.svg")) if os.path.exists(resource_path("assets/svgs/Artist.svg")) else QIcon())
         self.artist.setIconSize(QSize(20, 20))
         self.played = QPushButton("Most Played")
-        self.played.setIcon(QIcon("assets/svgs/replay.svg") if os.path.exists("assets/svgs/replay.svg") else QIcon())
+        self.played.setIcon(QIcon(resource_path("assets/svgs/replay.svg")) if os.path.exists("assets/svgs/replay.svg") else QIcon())
         self.played.setIconSize(QSize(20, 20))
         self.my_playlists = QPushButton("My Playlists")
-        self.my_playlists.setIcon(QIcon("assets/svgs/playlist.svg") if os.path.exists("assets/svgs/playlist.svg") else QIcon())
+        self.my_playlists.setIcon(QIcon(resource_path("assets/svgs/playlist.svg")) if os.path.exists(resource_path("assets/svgs/playlist.svg")) else QIcon())
         self.my_playlists.setIconSize(QSize(20, 20))
         self.pop_genre = QPushButton("Pop")
-        self.pop_genre.setIcon(QIcon("assets/svgs/pop.svg") if os.path.exists("assets/svgs/pop.svg") else QIcon())
+        self.pop_genre.setIcon(QIcon(resource_path("assets/svgs/pop.svg")) if os.path.exists(resource_path("assets/svgs/pop.svg")) else QIcon())
         self.pop_genre.setIconSize(QSize(20, 20))
         self.rock_genre = QPushButton("Rock")
-        self.rock_genre.setIcon(QIcon("assets/svgs/rock.svg") if os.path.exists("assets/svgs/rock.svg") else QIcon())
+        self.rock_genre.setIcon(QIcon(resource_path("assets/svgs/rock.svg")) if os.path.exists(resource_path("assets/svgs/rock.svg")) else QIcon())
         self.rock_genre.setIconSize(QSize(20, 20))
         for btn in [
             self.home_button, self.search_button, self.recognize, self.artist,
@@ -265,7 +276,7 @@ class MainWindow(QWidget):
         about_label.setObjectName("recent")
         sidebar.addWidget(about_label)
         self.aboutbtn = QPushButton("About Us")
-        self.aboutbtn.setIcon(QIcon("assets/svgs/about.svg") if os.path.exists("assets/svgs/about.svg") else QIcon())
+        self.aboutbtn.setIcon(QIcon(resource_path("assets/svgs/about.svg")) if os.path.exists(resource_path("assets/svgs/about.svg")) else QIcon())
         self.aboutbtn.setIconSize(QSize(20, 20))
         self.aboutbtn.setCursor(Qt.PointingHandCursor)
         self.aboutbtn.setFixedHeight(40)
@@ -287,7 +298,7 @@ class MainWindow(QWidget):
         home.setContentsMargins(2, 0, 2, 0)
 
         background_label = QLabel()
-        image = QImage('assets/Banner.png') if os.path.exists('assets/Banner.png') else QImage(800, 400,QImage.Format_RGB32)
+        image = QImage(resource_path('assets/Banner.png')) if os.path.exists(resource_path('assets/Banner.png')) else QImage(800, 400,QImage.Format_RGB32)
         if not image.isNull():
             transform = QTransform().scale(-1, 1)
             mirrored_image = image.transformed(transform, Qt.SmoothTransformation)
@@ -309,10 +320,8 @@ class MainWindow(QWidget):
             background_label.setPixmap(final_pixmap)
             background_label.setScaledContents(True)
         else:
-            placeholder_pixmap = QPixmap(800, 400)
-            placeholder_pixmap.fill(Qt.gray)
-            background_label.setPixmap(placeholder_pixmap)
-            background_label.setScaledContents(True)
+            background_label.setPixmap(QPixmap(800, 400).fill(Qt.gray))
+
         content_layout_background = QVBoxLayout(background_label)
         content_layout_background.setContentsMargins(20, 120, 0, 0)
         content_layout_background.setAlignment(Qt.AlignTop)
@@ -479,7 +488,7 @@ class MainWindow(QWidget):
         """)
         top_layout.addWidget(self.inputfield, stretch=1)
         search_button = QPushButton("Search")
-        search_button.setIcon(QIcon("assets/svgs/search.svg") if os.path.exists("assets/svgs/search.svg") else QIcon())
+        search_button.setIcon(QIcon(resource_path("assets/svgs/search.svg")) if os.path.exists(resource_path("assets/svgs/search.svg")) else QIcon())
         search_button.setIconSize(QSize(20, 20))
         search_button.setObjectName("search-button")
         search_button.setCursor(Qt.PointingHandCursor)
@@ -542,7 +551,7 @@ class MainWindow(QWidget):
         """)
         artist_top_layout.addWidget(self.artist_inputfield, stretch=1)
         artist_search_button = QPushButton("Search")
-        artist_search_button.setIcon(QIcon("assets/svgs/search.svg") if os.path.exists("assets/svgs/search.svg") else QIcon())
+        artist_search_button.setIcon(QIcon(resource_path("assets/svgs/search.svg")) if os.path.exists(resource_path("assets/svgs/search.svg")) else QIcon())
         artist_search_button.setIconSize(QSize(20, 20))
         artist_search_button.setObjectName("search-button")
         artist_search_button.setCursor(Qt.PointingHandCursor)
@@ -695,48 +704,43 @@ class MainWindow(QWidget):
         team_layout = QHBoxLayout()
         team_layout.setSpacing(20)
         team_members = [
-            ("Moeez Sheikh", "Developer", "assets/Moeez.png"),
-            ("Taha Ilyas", "Designer", "assets/Taha.png"),
-            ("Haseeb Akram", "Designer", "assets/Haseeb.png"),
-            ("Fasee Muzammil", "Developer", "assets/Fasee.png")
-        ]
+    ("Moeez Sheikh", "Developer", "assets/Moeez.png"),
+    ("Taha Ilyas", "Designer", "assets/Taha.png"),
+    ("Haseeb Akram", "Designer", "assets/Haseeb.png"),
+    ("Fasee Muzammil", "Developer", "assets/Fasee.png")
+]
         for name, role, image_path in team_members:
             member_layout = QVBoxLayout()
             avatar = QLabel()
-
-            if os.path.exists(image_path):
-                pixmap = QPixmap(image_path).scaled(100, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            pixmap = QPixmap()
+            if os.path.exists(resource_path(image_path)):
+                pixmap.load(resource_path(image_path))  # Use resource_path for PyInstaller
+                pixmap = pixmap.scaled(100, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             else:
+                print(f"About Us: Image {image_path} not found, using placeholder")  # Debug
                 pixmap = QPixmap(100, 100)
                 pixmap.fill(Qt.gray)
-
+            
             rounded_pixmap = QPixmap(120, 120)
             rounded_pixmap.fill(Qt.transparent)
-
             painter = QPainter(rounded_pixmap)
             path = QPainterPath()
-            path.addEllipse(10, 10, 100, 100)  # small padding inside the 120x120
+            path.addEllipse(0, 0, 100, 100)
             painter.setClipPath(path)
-            painter.drawPixmap(10, 10, pixmap)  # Center inside rounded_pixmap
+            painter.drawPixmap(0, 0, pixmap)
             painter.end()
-
             avatar.setPixmap(rounded_pixmap)
             avatar.setAlignment(Qt.AlignCenter)
-
             member_layout.addWidget(avatar)
-
             name_label = QLabel(name)
             name_label.setObjectName("label-name")
             name_label.setAlignment(Qt.AlignCenter)
             member_layout.addWidget(name_label)
-
             role_label = QLabel(role)
             role_label.setObjectName("artist-name")
             role_label.setAlignment(Qt.AlignCenter)
             member_layout.addWidget(role_label)
-
             team_layout.addLayout(member_layout)
-
 
         about_layout.addLayout(team_layout)
 
@@ -1083,7 +1087,7 @@ class MainWindow(QWidget):
         # Add "Show More" button if there are more tracks
         if len(track_info) > 5:
             button_view = QPushButton("Show More")
-            button_view.setIcon(QIcon("assets/svgs/more.svg") if os.path.exists("assets/svgs/more.svg") else QIcon())
+            button_view.setIcon(QIcon(resource_path("assets/svgs/more.svg")) if os.path.exists(resource_path("assets/svgs/more.svg")) else QIcon())
             button_view.setCursor(Qt.PointingHandCursor)
             button_view.setObjectName("button-view")
             button_view.setIconSize(QSize(40, 40))
@@ -1175,7 +1179,7 @@ class MainWindow(QWidget):
         
         # Add "Show More" button
         button_view = QPushButton("Show More")
-        button_view.setIcon(QIcon("assets/svgs/more.svg") if os.path.exists("assets/svgs/more.svg") else QIcon())
+        button_view.setIcon(QIcon(resource_path("assets/svgs/more.svg")) if os.path.exists(resource_path("assets/svgs/more.svg")) else QIcon())
         button_view.setCursor(Qt.PointingHandCursor)
         button_view.setObjectName("button-view")
         button_view.setIconSize(QSize(40, 40))
@@ -1265,7 +1269,7 @@ class MainWindow(QWidget):
         
         # Add "Show More" button
         button_new_songs = QPushButton("Show More")
-        button_new_songs.setIcon(QIcon("assets/svgs/more.svg") if os.path.exists("assets/svgs/more.svg") else QIcon())
+        button_new_songs.setIcon(QIcon(resource_path("assets/svgs/more.svg")) if os.path.exists(resource_path("assets/svgs/more.svg")) else QIcon())
         button_new_songs.setCursor(Qt.PointingHandCursor)
         button_new_songs.setObjectName("button-view")
         button_new_songs.setIconSize(QSize(40, 40))
