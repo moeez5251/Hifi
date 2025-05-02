@@ -705,9 +705,6 @@ class MainWindow(QWidget):
         team_layout.setSpacing(20)
         team_members = [
     ("Moeez Sheikh", "Developer", "assets/Moeez.png"),
-    ("Taha Ilyas", "Designer", "assets/Taha.png"),
-    ("Haseeb Akram", "Designer", "assets/Haseeb.png"),
-    ("Fasee Muzammil", "Developer", "assets/Fasee.png")
 ]
         for name, role, image_path in team_members:
             member_layout = QVBoxLayout()
